@@ -1,10 +1,10 @@
-"""Bilde -> sannsynlighet for materiale (tekstil, metall, tre, plast) med CLIP zero-shot.
+"""Bilde -> sannsynlighet for materiale (tekstil, metall, tre, plast, glass) med CLIP zero-shot.
 
     python vision_material.py path/to/image.jpg
     python vision_material.py --webcam
 
 Ingen trening: en ferdigtrent CLIP-modell sammenligner bildet med tekstbeskrivelser.
-predict_material() returnerer {"textile": p, "metal": p, "wood": p, "plastic": p} med sum 1.
+predict_material() returnerer {"textile": p, "metal": p, "wood": p, "plastic": p, "glass": p} med sum 1.
 """
 
 from __future__ import annotations
@@ -38,9 +38,9 @@ from PIL import Image  # noqa: E402
 from transformers import pipeline  # noqa: E402
 
 # CLIP-etikett (naturlig engelsk) -> nøkkel i resultatet.
-LABELS = {"fabric": "textile", "metal": "metal", "wood": "wood", "plastic": "plastic"}
+LABELS = {"fabric": "textile", "metal": "metal", "wood": "wood", "plastic": "plastic", "glass": "glass"}
 TEMPLATES = ["a photo of a {} object", "an object made of {}"]
-NORWEGIAN = {"textile": "TEKSTIL", "metal": "METALL", "wood": "TRE", "plastic": "PLAST"}
+NORWEGIAN = {"textile": "TEKSTIL", "metal": "METALL", "wood": "TRE", "plastic": "PLAST", "glass": "GLASS"}
 
 CAPTURES_DIR = Path(__file__).resolve().parent / "captures"
 
@@ -66,7 +66,7 @@ def _to_rgb_image(image) -> Image.Image:
 
 
 def predict_material(image) -> dict:
-    """Returnerer {"textile": float, "metal": float, "wood": float, "plastic": float} med sum 1."""
+    """Returnerer {"textile": float, "metal": float, "wood": float, "plastic": float, "glass": float} med sum 1."""
     image = _to_rgb_image(image)
     totals = {key: 0.0 for key in LABELS.values()}
 
@@ -101,7 +101,7 @@ def capture_webcam_image(camera_index: int = 0, warmup_frames: int = 10) -> Imag
 
 
 def norwegian_line(probs: dict) -> str:
-    """F.eks. 'TRE 81.2% | METALL 12.0% | TEKSTIL 4.1% | PLAST 2.7%', høyest først."""
+    """F.eks. 'TRE 81.2% | METALL 12.0% | TEKSTIL 4.1% | PLAST 1.5% | GLASS 1.2%', høyest først."""
     ranked = sorted(probs.items(), key=lambda item: item[1], reverse=True)
     return " | ".join(f"{NORWEGIAN[key]} {value * 100:.1f}%" for key, value in ranked)
 

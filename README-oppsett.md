@@ -39,7 +39,7 @@ Får du `kamera FEIL`: gå til Systeminnstillinger → Personvern og sikkerhet �
 
 ## Bildemodellen: `vision_material.py`
 
-Gir sannsynlighet for tre materialer ut fra ett bilde: **tekstil, metall og tre**. Bruker en ferdigtrent CLIP-modell uten egen trening (zero-shot).
+Gir sannsynlighet for fem materialer ut fra ett bilde: **tekstil, metall, tre, plast og glass**. Bruker en ferdigtrent CLIP-modell uten egen trening (zero-shot).
 
 ### Kjør fra terminalen
 
@@ -51,9 +51,9 @@ python vision_material.py --webcam     # tar bilde med webkameraet
 Eksempel på utdata:
 
 ```text
-{"textile": 0.08, "metal": 0.90, "wood": 0.02}
+{"textile": 0.05, "metal": 0.86, "wood": 0.01, "plastic": 0.05, "glass": 0.03}
 Inferens: 715 ms (mps)
-METALL 90.3% | TEKSTIL 8.1% | TRE 1.6%
+METALL 86.0% | TEKSTIL 5.0% | PLAST 5.0% | GLASS 3.0% | TRE 1.0%
 ```
 
 Med `--webcam` lagres bildet i `captures/`. Modellen lastes først (ca. 7–10 sekunder), deretter tas bildet. Hold objektet i ro til terminalen skriver `Lagret …`.
@@ -65,10 +65,10 @@ from vision_material import predict_material, capture_webcam_image
 
 bilde = capture_webcam_image()
 p = predict_material(bilde)   # eller predict_material("test.jpg")
-# {"textile": float, "metal": float, "wood": float}, summerer til 1
+# {"textile": float, "metal": float, "wood": float, "plastic": float, "glass": float}, summerer til 1
 ```
 
-Nøklene er alltid `textile`, `metal` og `wood`. Lyd- og Bayes-delen bruker de samme nøklene.
+Nøklene er alltid `textile`, `metal`, `wood`, `plastic` og `glass`. Lyd- og Bayes-delen må bruke de samme nøklene.
 
 ### For best resultat
 
