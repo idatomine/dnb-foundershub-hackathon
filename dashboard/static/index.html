@@ -23,17 +23,22 @@
       <div class="viewer-bar">
         <h2>Scanned room</h2>
         <button type="button" id="place-btn" class="btn">+ Place object</button>
-        <label class="small muted size-ctl">Point size <input type="range" id="point-size" min="0.01" max="0.12" step="0.005" value="0.05"></label>
-        <span id="viewer-hint" class="muted small">Drag to rotate, scroll to zoom, right-drag to pan. Click a box to select it.</span>
+        <label class="small muted size-ctl">Point size <input type="range" id="point-size" min="0.01" max="0.12" step="0.005" value="0.07"></label>
+        <span id="viewer-hint" class="muted small">Drag to rotate, scroll to zoom, right-drag to pan. Click an object to select it, click empty space or press Esc to deselect.</span>
       </div>
       <div id="viewer" aria-label="3D point cloud of the scanned room"></div>
       <p id="viewer-status" class="muted small"></p>
-      <h2>Objects</h2>
-      <ul id="object-list" class="object-list"></ul>
+      <details class="objects-dropdown">
+        <summary><h2>Objects</h2></summary>
+        <ul id="object-list" class="object-list"></ul>
+      </details>
     </section>
 
-    <section class="detail-panel" id="detail">
-      <p class="muted empty">Click <b>+ Place object</b>, then click the object in the 3D view. Or select one from the list.</p>
+    <section class="detail-panel">
+      <div id="hover-card" hidden></div>
+      <div id="detail">
+        <p class="muted empty">Hover over an object in the 3D view to see its data. Click it to edit.</p>
+      </div>
     </section>
   </main>
 
@@ -96,6 +101,8 @@
       </fieldset>
 
       <label>Notes <textarea name="notes" rows="3"></textarea></label>
+
+      <div class="d-recordings recordings"></div>
 
       <div class="form-actions">
         <button type="submit" class="btn primary">Save</button>
