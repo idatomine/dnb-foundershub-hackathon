@@ -1,0 +1,32 @@
+{
+  "material": "wood",
+  "run": 6,
+  "label": "meas",
+  "rate": 16000,
+  "samples": 19456,
+  "bits": 16,
+  "chunks": 19,
+  "peak_level": -7.8,
+  "peak_raw": 13276,
+  "distance_mm": null,
+  "tilt": 85.8,
+  "orientation": "edge_right",
+  "play_offset": 1024,
+  "sweep_f1": 200,
+  "sweep_f2": 7500,
+  "sweep_seconds": 0.8,
+  "file": "malinger_wood3.wav",
+  "recorded_at": "2026-11-05T18:53:05+01:00",
+  "samples_received": 19456,
+  "duration_s": 1.216,
+  "image": "20261105_185220_maaling_006.jpg",
+  "vision": {
+    "textile": 0.0023,
+    "metal": 0.0017,
+    "wood": 0.9913,
+    "plastic": 0.0022,
+    "glass": 0.0024
+  },
+  "vision_material": "wood",
+  "vision_confidence": 0.9913
+}

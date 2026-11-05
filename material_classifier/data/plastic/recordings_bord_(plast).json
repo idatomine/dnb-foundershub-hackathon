@@ -1,0 +1,22 @@
+{
+  "material": "plastic",
+  "run": 11,
+  "label": "meas",
+  "rate": 16000,
+  "samples": 19456,
+  "bits": 16,
+  "chunks": 19,
+  "peak_level": -6.7,
+  "peak_raw": 15091,
+  "distance_mm": 79,
+  "tilt": 174.1,
+  "orientation": "face_down",
+  "play_offset": 1024,
+  "sweep_f1": 200,
+  "sweep_f2": 7500,
+  "sweep_seconds": 0.8,
+  "file": "recordings_bord_(plast).wav",
+  "recorded_at": "2026-11-05T18:09:32+01:00",
+  "samples_received": 19456,
+  "duration_s": 1.216
+}

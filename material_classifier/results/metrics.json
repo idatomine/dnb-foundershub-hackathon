@@ -7,15 +7,15 @@
     "textile",
     "glass"
   ],
-  "n_recordings": 14,
+  "n_recordings": 26,
   "n_unique_objects": null,
   "recordings_per_class": {
-    "air": 6,
-    "glass": 1,
+    "air": 8,
+    "glass": 3,
     "metal": 1,
-    "plastic": 2,
-    "textile": 3,
-    "wood": 1
+    "plastic": 5,
+    "textile": 6,
+    "wood": 3
   },
   "objects_per_class": null,
   "cv_type": "unavailable: fewer than two recordings in a class",

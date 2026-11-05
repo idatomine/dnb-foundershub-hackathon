@@ -1,0 +1,22 @@
+{
+  "material": "glass",
+  "run": 9,
+  "label": "meas",
+  "rate": 16000,
+  "samples": 19456,
+  "bits": 16,
+  "chunks": 19,
+  "peak_level": -7.6,
+  "peak_raw": 13675,
+  "distance_mm": 105,
+  "tilt": 103.4,
+  "orientation": "edge_back",
+  "play_offset": 1024,
+  "sweep_f1": 200,
+  "sweep_f2": 7500,
+  "sweep_seconds": 0.8,
+  "file": "recordings_glass.wav",
+  "recorded_at": "2026-11-05T18:07:50+01:00",
+  "samples_received": 19456,
+  "duration_s": 1.216
+}

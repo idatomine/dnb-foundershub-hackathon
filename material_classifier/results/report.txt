@@ -1,10 +1,10 @@
 ACOUSTIC MATERIAL CLASSIFIER — RANDOM FOREST
 
 Classes: air, plastic, metal, wood, textile, glass
-Recordings: 14
+Recordings: 26
 Acoustic features: 49
 
-Recordings per material: {np.str_('air'): 6, np.str_('glass'): 1, np.str_('metal'): 1, np.str_('plastic'): 2, np.str_('textile'): 3, np.str_('wood'): 1}
+Recordings per material: {np.str_('air'): 8, np.str_('glass'): 3, np.str_('metal'): 1, np.str_('plastic'): 5, np.str_('textile'): 6, np.str_('wood'): 3}
 Unique physical objects per material: unknown (object_id not provided)
 Validation: unavailable: fewer than two recordings in a class
 Distance and JSON material labels are NOT classifier features.

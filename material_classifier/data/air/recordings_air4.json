@@ -1,0 +1,22 @@
+{
+  "material": "air",
+  "run": 20,
+  "label": "meas",
+  "rate": 16000,
+  "samples": 19456,
+  "bits": 16,
+  "chunks": 19,
+  "peak_level": -9.8,
+  "peak_raw": 10618,
+  "distance_mm": 626,
+  "tilt": 102.4,
+  "orientation": "edge_right",
+  "play_offset": 1024,
+  "sweep_f1": 200,
+  "sweep_f2": 7500,
+  "sweep_seconds": 0.8,
+  "file": "recordings_air4.wav",
+  "recorded_at": "2026-11-05T18:13:17+01:00",
+  "samples_received": 19456,
+  "duration_s": 1.216
+}

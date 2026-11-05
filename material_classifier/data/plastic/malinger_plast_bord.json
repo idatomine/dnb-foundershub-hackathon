@@ -1,0 +1,32 @@
+{
+  "material": "plastic",
+  "run": 4,
+  "label": "meas",
+  "rate": 16000,
+  "samples": 19456,
+  "bits": 16,
+  "chunks": 19,
+  "peak_level": -8.3,
+  "peak_raw": 12562,
+  "distance_mm": null,
+  "tilt": 177.7,
+  "orientation": "face_down",
+  "play_offset": 1024,
+  "sweep_f1": 200,
+  "sweep_f2": 7500,
+  "sweep_seconds": 0.8,
+  "file": "malinger_plast_bord.wav",
+  "recorded_at": "2026-11-05T18:40:28+01:00",
+  "samples_received": 19456,
+  "duration_s": 1.216,
+  "image": "20261105_183916_maaling_004.jpg",
+  "vision": {
+    "textile": 0.0189,
+    "metal": 0.0244,
+    "wood": 0.9153,
+    "plastic": 0.0335,
+    "glass": 0.0079
+  },
+  "vision_material": "wood",
+  "vision_confidence": 0.9153
+}

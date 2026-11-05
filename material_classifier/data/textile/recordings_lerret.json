@@ -1,0 +1,22 @@
+{
+  "material": "textile",
+  "run": 15,
+  "label": "meas",
+  "rate": 16000,
+  "samples": 19456,
+  "bits": 16,
+  "chunks": 19,
+  "peak_level": -12.1,
+  "peak_raw": 8112,
+  "distance_mm": 128,
+  "tilt": 75.9,
+  "orientation": "edge_right",
+  "play_offset": 1024,
+  "sweep_f1": 200,
+  "sweep_f2": 7500,
+  "sweep_seconds": 0.8,
+  "file": "recordings_lerret.wav",
+  "recorded_at": "2026-11-05T18:11:36+01:00",
+  "samples_received": 19456,
+  "duration_s": 1.216
+}

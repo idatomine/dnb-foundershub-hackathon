@@ -1,0 +1,22 @@
+{
+  "material": "textile",
+  "run": 10,
+  "label": "meas",
+  "rate": 16000,
+  "samples": 19456,
+  "bits": 16,
+  "chunks": 19,
+  "peak_level": -13.2,
+  "peak_raw": 7158,
+  "distance_mm": 137,
+  "tilt": 41.0,
+  "orientation": "unknown",
+  "play_offset": 1024,
+  "sweep_f1": 200,
+  "sweep_f2": 7500,
+  "sweep_seconds": 0.8,
+  "file": "recordings_tynn_gardin.wav",
+  "recorded_at": "2026-11-05T18:08:24+01:00",
+  "samples_received": 19456,
+  "duration_s": 1.216
+}
