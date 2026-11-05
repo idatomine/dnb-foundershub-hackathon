@@ -14,6 +14,7 @@ let room = null;
 let presets = [];
 let selectedId = null;
 let placeMode = false;
+let hoveredId = null;
 
 // ---------- 3D viewer ----------
 const viewerEl = document.getElementById("viewer");
@@ -41,6 +42,20 @@ function setupViewer() {
     render();
   }).observe(viewerEl);
 
+  const tip = document.createElement("div");
+  tip.className = "hover-tip";
+  tip.hidden = true;
+  viewerEl.appendChild(tip);
+  let pending = null;
+  renderer.domElement.addEventListener("pointermove", e => {
+    if (pending) return;
+    pending = requestAnimationFrame(() => { pending = null; updateHover(e, tip); });
+  });
+  renderer.domElement.addEventListener("pointerleave", () => {
+    tip.hidden = true;
+    if (hoveredId) { hoveredId = null; updateBoxVisibility(); }
+  });
+
   // A click only counts if the pointer barely moved, so orbiting does not select things.
   let down = null;
   renderer.domElement.addEventListener("pointerdown", e => { down = [e.clientX, e.clientY]; });
@@ -51,6 +66,51 @@ function setupViewer() {
 }
 
 function render() { renderer.render(scene, camera); }
+
+function updateHover(e, tip) {
+  if (e.buttons) {
+    tip.hidden = true;
+    if (hoveredId) { hoveredId = null; updateBoxVisibility(); }
+    return;
+  }
+  const rect = renderer.domElement.getBoundingClientRect();
+  raycaster.setFromCamera(new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1,
+    -((e.clientY - rect.top) / rect.height) * 2 + 1), camera);
+  const hit = raycaster.intersectObjects([...boxGroups.values()].map(g => g.children[0]), false)[0];
+  const s = hit && room.surfaces.find(x => x.id === hit.object.userData.id);
+  renderer.domElement.style.cursor = s && !placeMode ? "pointer" : "";
+  const newHover = s ? s.id : null;
+  if (newHover !== hoveredId) { hoveredId = newHover; updateBoxVisibility(); }
+  if (!s) { tip.hidden = true; return; }
+
+  const en = s.enrichment;
+  const rows = [];
+  const add = (k, v) => { if (v != null && v !== "") rows.push([k, String(v)]); };
+  add("Material", en.material || s.cv_guess?.material);
+  add("Fabric", en.fabric);
+  add("Friction coeff", en.friction_coeff);
+  add("Density", en.density_kg_m3 != null ? `${en.density_kg_m3} kg/m³` : null);
+  add("Thickness", en.thickness_mm != null ? `${en.thickness_mm} mm` : null);
+  const alpha = BANDS.filter(b => en.absorption_alpha[b] != null);
+  if (alpha.length) add("α", alpha.map(b => `${BAND_LABELS[b]}: ${en.absorption_alpha[b]}`).join("  "));
+  add("Data", SOURCE_LABELS[en.source] || en.source);
+
+  tip.replaceChildren();
+  const title = document.createElement("strong");
+  title.textContent = s.label;
+  tip.appendChild(title);
+  for (const [k, v] of rows) {
+    const line = document.createElement("div");
+    const key = document.createElement("span");
+    key.textContent = `${k}: `;
+    line.append(key, v);
+    tip.appendChild(line);
+  }
+  tip.hidden = false;
+  const vx = e.clientX - rect.left, vy = e.clientY - rect.top;
+  tip.style.left = `${Math.min(vx + 14, rect.width - tip.offsetWidth - 8)}px`;
+  tip.style.top = `${Math.min(vy + 14, rect.height - tip.offsetHeight - 8)}px`;
+}
 
 async function loadCloud(meta) {
   const status = document.getElementById("viewer-status");
@@ -114,9 +174,21 @@ function rebuildBoxes() {
     label.position.set(0, 0, 0.5 + 0.3 / Math.max(s.geometry.size_m[2], 0.1));
     group.add(mesh, edges, label);
     group.userData.label = label;
+    group.userData.edges = edges;
     boxGroups.set(s.id, group);
     applyBoxGeometry(group, s.geometry);
     scene.add(group);
+  }
+  updateBoxVisibility();
+}
+
+// Boxes stay invisible but still clickable; only the hovered and selected ones are drawn.
+function updateBoxVisibility() {
+  for (const [id, group] of boxGroups) {
+    const show = id === selectedId || id === hoveredId;
+    group.children[0].material.opacity = show ? 0.18 : 0;
+    group.userData.edges.visible = show;
+    group.userData.label.visible = show;
   }
   render();
 }
@@ -248,7 +320,7 @@ function renderDetail() {
   badge.textContent = SOURCE_LABELS[e.source] || e.source;
   const cv = s.cv_guess;
   panel.querySelector(".d-cv").textContent = cv
-    ? `Scan says: ${s.category} · ${cv.material ?? "unknown"} (${Math.round((cv.confidence ?? 0) * 100)}% confidence)`
+    ? `Scan says: ${s.category} · ${cv.material ?? "unknown"}` + (cv.confidence != null ? ` (${Math.round(cv.confidence * 100)}% confidence)` : "")
     : "Placed by hand in the 3D view.";
 
   const form = panel.querySelector(".d-form");
