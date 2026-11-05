@@ -28,6 +28,13 @@ USER_SURFACES_PATH = DATA_DIR / "user_surfaces.json"
 CLOUD_PATH = DATA_DIR / "cloud.bin"
 CLOUD_META_PATH = DATA_DIR / "cloud.json"
 RECORDINGS_DIR = ROOT.parent / "recordings"
+MEASUREMENTS_DIR = ROOT.parent / "malinger"
+# URL prefix -> folder holding rig recordings (wav + json, optional png/jpg).
+RECORDING_DIRS = {"recordings": RECORDINGS_DIR, "malinger": MEASUREMENTS_DIR}
+MATERIAL_ALIASES = {"fabric": "textile", "metall": "metal", "tekstil": "textile", "tre": "wood",
+                    "plast": "plastic", "glass": "glass", "luft": "air"}
+# JSON keys the models write their per-material probabilities under.
+MODEL_KEYS = {"vision": ("vision",), "sound": ("sound", "audio", "acoustic", "sound_model", "acoustic_model")}
 RECORDING_META_KEYS = ("run", "label", "material", "distance_mm", "tilt", "orientation", "sweep_f1", "sweep_f2",
                        "sweep_seconds", "rate", "peak_level", "recorded_at", "duration_s")
 CATEGORIES = {"wall", "floor", "ceiling", "window", "door", "furniture", "other"}
@@ -63,45 +70,81 @@ def _save_json(path: Path, data) -> None:
     tmp.replace(path)
 
 
+def _probabilities(raw) -> dict | None:
+    if isinstance(raw, dict) and isinstance(raw.get("probabilities"), dict):
+        raw = raw["probabilities"]
+    if not isinstance(raw, dict):
+        return None
+    out = {}
+    for key, value in raw.items():
+        if isinstance(value, (int, float)):
+            name = MATERIAL_ALIASES.get(str(key).lower(), str(key).lower())
+            out[name] = out.get(name, 0.0) + float(value)
+    return out or None
+
+
 def load_recordings(surface_ids: set[str]) -> dict[str, list]:
     """Group rig recordings by object. A recording belongs to an object when its JSON has
     "object": "<id>", when data/recording_links.json maps its file stem to one or more ids,
     when its "label" is an object id, or when an id appears in its file name."""
     by_object: dict[str, list] = {}
-    if not RECORDINGS_DIR.is_dir():
-        return by_object
-    files = sorted(p.name for p in RECORDINGS_DIR.iterdir())
     link_file = _load_json(DATA_DIR / "recording_links.json", {})
     links, mock = link_file.get("links", {}), bool(link_file.get("mock", False))
-    for meta_path in sorted(RECORDINGS_DIR.glob("*.json")):
-        try:
-            meta = json.loads(meta_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
+    for prefix, folder in RECORDING_DIRS.items():
+        if not folder.is_dir():
             continue
-        stem = meta_path.stem
-        related = [f for f in files if f.rsplit(".", 1)[0] == stem or f.startswith(stem + "_")]
-        targets, is_mock = [], False
-        if meta.get("object") in surface_ids:
-            targets = [meta["object"]]
-        elif stem in links:
-            linked = links[stem] if isinstance(links[stem], list) else [links[stem]]
-            targets, is_mock = [t for t in linked if t in surface_ids], mock
-        elif meta.get("label") in surface_ids:
-            targets = [meta["label"]]
-        else:
-            hit = next((sid for sid in sorted(surface_ids, key=len, reverse=True)
-                        if any(sid in f for f in related)), None)
-            targets = [hit] if hit else []
-        record = {
-            "id": stem,
-            "spectrogram": next((f"/recordings/{quote(f)}" for f in related if f.endswith(".png")), None),
-            "audio": next((f"/recordings/{quote(f)}" for f in related if f.endswith(".wav")), None),
-            "meta": {k: meta[k] for k in RECORDING_META_KEYS if k in meta},
-            "mock": is_mock,
-        }
-        for target in targets:
-            by_object.setdefault(target, []).append(record)
+        files = sorted(p.name for p in folder.iterdir())
+        for meta_path in sorted(folder.glob("*.json")):
+            try:
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                continue
+            stem = meta_path.stem
+            related = [f for f in files if f.rsplit(".", 1)[0] == stem or f.startswith(stem + "_")]
+            targets, is_mock = [], False
+            if meta.get("object") in surface_ids:
+                targets = [meta["object"]]
+            elif stem in links:
+                linked = links[stem] if isinstance(links[stem], list) else [links[stem]]
+                targets, is_mock = [t for t in linked if t in surface_ids], mock
+            elif meta.get("label") in surface_ids:
+                targets = [meta["label"]]
+            else:
+                hit = next((sid for sid in sorted(surface_ids, key=len, reverse=True)
+                            if any(sid in f for f in related)), None)
+                targets = [hit] if hit else []
+            if not targets:
+                continue
+            url = lambda ext: next((f"/{prefix}/{quote(f)}" for f in related if f.lower().endswith(ext)), None)
+            predictions = {}
+            for model, keys in MODEL_KEYS.items():
+                probs = next((p for p in (_probabilities(meta.get(k)) for k in keys) if p), None)
+                if probs:
+                    predictions[model] = probs
+            record = {
+                "id": f"{prefix}/{stem}",
+                "spectrogram": url(".png"),
+                "audio": url(".wav"),
+                "image": url(".jpg"),
+                "meta": {k: meta[k] for k in RECORDING_META_KEYS if k in meta},
+                "predictions": predictions,
+                "mock": is_mock,
+            }
+            for target in targets:
+                by_object.setdefault(target, []).append(record)
+    for records in by_object.values():
+        records.sort(key=lambda r: r["meta"].get("recorded_at") or "")
     return by_object
+
+
+def object_predictions(records: list) -> dict:
+    """Latest output of each model among an object's recordings."""
+    out = {}
+    for record in records:
+        for model, probs in record["predictions"].items():
+            out[model] = {"probabilities": probs, "recording": record["id"],
+                          "recorded_at": record["meta"].get("recorded_at")}
+    return out
 
 
 def load_room() -> dict:
@@ -113,8 +156,13 @@ def load_room() -> dict:
         base["surfaces"].append(surface)
     enriched = _load_json(ENRICHED_PATH, {})
     recordings = load_recordings({s["id"] for s in base.get("surfaces", [])})
+    mock_predictions = _load_json(DATA_DIR / "mock_predictions.json", {})
     for surface in base.get("surfaces", []):
         surface["recordings"] = recordings.get(surface["id"], [])
+        surface["predictions"] = object_predictions(surface["recordings"])
+        for model, probs in mock_predictions.get(surface["id"], {}).items():
+            if model not in surface["predictions"] and _probabilities(probs):
+                surface["predictions"][model] = {"probabilities": _probabilities(probs), "mock": True}
         overlay = enriched.get(surface["id"])
         surface["enrichment"] = {**EMPTY_ENRICHMENT, **(overlay or {})}
         if overlay and "absorption_alpha" in overlay:
@@ -275,17 +323,17 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _send_recording(self, name: str):
-        types = {".png": "image/png", ".wav": "audio/wav", ".json": "application/json"}
+    def _send_recording(self, folder: Path, name: str):
+        types = {".png": "image/png", ".jpg": "image/jpeg", ".wav": "audio/wav", ".json": "application/json"}
         name = unquote(name)
-        path = RECORDINGS_DIR / name
-        if ("/" in name or "\\" in name or name.startswith(".") or path.suffix not in types
-                or path.resolve().parent != RECORDINGS_DIR.resolve() or not path.is_file()):
+        path = folder / name
+        if ("/" in name or "\\" in name or name.startswith(".") or path.suffix.lower() not in types
+                or path.resolve().parent != folder.resolve() or not path.is_file()):
             self.send_error(404)
             return
         body = path.read_bytes()
         self.send_response(200)
-        self.send_header("Content-Type", types[path.suffix])
+        self.send_header("Content-Type", types[path.suffix.lower()])
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -303,8 +351,9 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
-        elif parsed.path.startswith("/recordings/"):
-            self._send_recording(parsed.path[len("/recordings/"):])
+        elif parsed.path.split("/")[1] in RECORDING_DIRS and parsed.path.count("/") == 2:
+            prefix, name = parsed.path.split("/")[1:]
+            self._send_recording(RECORDING_DIRS[prefix], name)
         elif parsed.path == "/api/export/pyroomacoustics":
             self._send_json(export_pyroomacoustics())
         elif parsed.path == "/" or not parsed.path.startswith("/api/"):

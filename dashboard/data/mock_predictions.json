@@ -1,0 +1,33 @@
+{
+  "_note": "MOCKUP model outputs for the demo layout. Used only where an object has no real output from that model. Delete this file when both models write real results.",
+  "gardin_mork": {
+    "sound": { "textile": 0.71, "wood": 0.09, "plastic": 0.06, "glass": 0.03, "metal": 0.02, "air": 0.09 }
+  },
+  "gardin_lys": {
+    "sound": { "textile": 0.52, "wood": 0.08, "plastic": 0.1, "glass": 0.04, "metal": 0.02, "air": 0.24 }
+  },
+  "tavle": {
+    "vision": { "textile": 0.31, "metal": 0.05, "wood": 0.06, "plastic": 0.55, "glass": 0.03 },
+    "sound": { "textile": 0.62, "wood": 0.12, "plastic": 0.17, "glass": 0.04, "metal": 0.02, "air": 0.03 }
+  },
+  "vegg_front": {
+    "vision": { "textile": 0.08, "metal": 0.04, "wood": 0.74, "plastic": 0.1, "glass": 0.04 },
+    "sound": { "textile": 0.05, "wood": 0.66, "plastic": 0.15, "glass": 0.08, "metal": 0.04, "air": 0.02 }
+  },
+  "stoler_rad1_venstre": {
+    "vision": { "textile": 0.22, "metal": 0.09, "wood": 0.03, "plastic": 0.63, "glass": 0.03 },
+    "sound": { "textile": 0.14, "wood": 0.08, "plastic": 0.58, "glass": 0.05, "metal": 0.12, "air": 0.03 }
+  },
+  "stoler_rad1_hoyre": {
+    "vision": { "textile": 0.24, "metal": 0.1, "wood": 0.03, "plastic": 0.6, "glass": 0.03 },
+    "sound": { "textile": 0.16, "wood": 0.07, "plastic": 0.55, "glass": 0.06, "metal": 0.13, "air": 0.03 }
+  },
+  "stoler_rad2": {
+    "vision": { "textile": 0.27, "metal": 0.08, "wood": 0.04, "plastic": 0.58, "glass": 0.03 },
+    "sound": { "textile": 0.2, "wood": 0.08, "plastic": 0.49, "glass": 0.06, "metal": 0.14, "air": 0.03 }
+  },
+  "plante": {
+    "vision": { "textile": 0.12, "metal": 0.03, "wood": 0.41, "plastic": 0.39, "glass": 0.05 },
+    "sound": { "textile": 0.18, "wood": 0.21, "plastic": 0.12, "glass": 0.03, "metal": 0.02, "air": 0.44 }
+  }
+}
