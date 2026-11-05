@@ -140,66 +140,92 @@ function renderRecordings(container, s, withAudio) {
   }
 }
 
+const MATERIAL_ORDER = ["textile", "wood", "plastic", "glass", "metal", "air"];
+const MATERIAL_LABELS = { textile: "Textile", wood: "Wood", plastic: "Plastic", glass: "Glass", metal: "Metal", air: "Air" };
+const MODELS = [
+  { key: "vision", label: "Camera model", hint: "CLIP, from the photo" },
+  { key: "sound", label: "Sound model", hint: "from the sweep recording" },
+];
+
+function topMaterial(probs) {
+  return Object.entries(probs).sort((a, b) => b[1] - a[1])[0]?.[0];
+}
+
+function renderPredictions(container, s) {
+  container.replaceChildren();
+  const preds = s.predictions || {};
+  for (const model of MODELS) {
+    const block = document.createElement("div");
+    block.className = "pred";
+    const head = document.createElement("div");
+    head.className = "pred-head";
+    const name = document.createElement("span");
+    name.textContent = model.label;
+    const hint = document.createElement("span");
+    hint.className = "muted";
+    hint.textContent = model.hint;
+    if (preds[model.key]?.mock) {
+      const tag = document.createElement("span");
+      tag.className = "mock-tag";
+      tag.textContent = "mockup";
+      name.append(" ", tag);
+    }
+    head.append(name, hint);
+    block.appendChild(head);
+
+    const probs = preds[model.key]?.probabilities;
+    if (!probs) {
+      const none = document.createElement("p");
+      none.className = "muted small pred-none";
+      none.textContent = "No output yet";
+      block.appendChild(none);
+    } else {
+      const best = topMaterial(probs);
+      const keys = [...MATERIAL_ORDER.filter(k => k in probs), ...Object.keys(probs).filter(k => !MATERIAL_ORDER.includes(k))];
+      for (const k of keys) {
+        const row = document.createElement("div");
+        row.className = "pred-row" + (k === best ? " best" : "");
+        const label = document.createElement("span");
+        label.textContent = MATERIAL_LABELS[k] || k;
+        const track = document.createElement("div");
+        track.className = "pred-track";
+        const bar = document.createElement("div");
+        bar.className = "pred-bar";
+        bar.style.width = `${Math.max(0, Math.min(1, probs[k])) * 100}%`;
+        track.appendChild(bar);
+        const pct = document.createElement("span");
+        pct.className = "pred-pct";
+        pct.textContent = `${Math.round(probs[k] * 100)}%`;
+        row.append(label, track, pct);
+        block.appendChild(row);
+      }
+    }
+    container.appendChild(block);
+  }
+
+  const v = preds.vision?.probabilities, a = preds.sound?.probabilities;
+  if (v && a) {
+    const verdict = document.createElement("p");
+    verdict.className = "pred-verdict";
+    const [tv, ta] = [topMaterial(v), topMaterial(a)];
+    verdict.textContent = tv === ta
+      ? `Both models say ${MATERIAL_LABELS[tv] || tv}.`
+      : `Models disagree: camera says ${MATERIAL_LABELS[tv] || tv}, sound says ${MATERIAL_LABELS[ta] || ta}.`;
+    container.appendChild(verdict);
+  }
+}
+
 function fillHoverCard(card, s) {
-  const en = s.enrichment;
   card.replaceChildren();
-  const head = document.createElement("div");
-  head.className = "detail-head";
   const title = document.createElement("h2");
   title.textContent = s.label;
-  const badge = document.createElement("span");
-  badge.className = "badge";
-  badge.dataset.source = en.source;
-  badge.textContent = SOURCE_LABELS[en.source] || en.source;
-  head.append(title, badge);
-  const cv = document.createElement("p");
-  cv.className = "muted";
-  cv.textContent = s.cv_guess ? `Scan says: ${s.category} · ${s.cv_guess.material}` : s.category;
-  card.append(head, cv);
-
-  const g = s.geometry;
-  const rows = [
-    ["Material", en.material], ["Fabric / composition", en.fabric], ["Friction coefficient", en.friction_coeff],
-    ["Density", en.density_kg_m3 != null ? `${en.density_kg_m3} kg/m³` : null],
-    ["Thickness", en.thickness_mm != null ? `${en.thickness_mm} mm` : null],
-    ["Size (w × d × h)", g?.size_m ? g.size_m.map(v => v.toFixed(2)).join(" × ") + " m" : null],
-    ["Notes", en.notes],
-  ];
-  const dl = document.createElement("dl");
-  dl.className = "meta-list";
-  for (const [k, v] of rows) {
-    const dt = document.createElement("dt"); dt.textContent = k;
-    const dd = document.createElement("dd");
-    if (v == null || v === "") { dd.textContent = "—"; dd.className = "muted"; } else dd.textContent = String(v);
-    dl.append(dt, dd);
-  }
-  card.appendChild(dl);
-
-  const alphaTitle = document.createElement("h3");
-  alphaTitle.textContent = "Absorption α per octave band";
-  const grid = document.createElement("div");
-  grid.className = "alpha-read";
-  for (const band of BANDS) {
-    const cell = document.createElement("div");
-    const v = en.absorption_alpha[band];
-    const bar = document.createElement("div");
-    bar.className = "alpha-bar";
-    bar.style.height = `${Math.round((v ?? 0) * 60)}px`;
-    const val = document.createElement("span");
-    val.textContent = v ?? "—";
-    const lab = document.createElement("span");
-    lab.className = "muted";
-    lab.textContent = BAND_LABELS[band];
-    cell.append(val, bar, lab);
-    grid.appendChild(cell);
-  }
-  const hint = document.createElement("p");
-  hint.className = "muted small";
-  hint.textContent = "Click the object to edit.";
-  const recs = document.createElement("div");
-  recs.className = "recordings";
-  renderRecordings(recs, s, false);
-  card.append(alphaTitle, grid, recs, hint);
+  const sub = document.createElement("p");
+  sub.className = "muted small";
+  sub.textContent = s.category;
+  const preds = document.createElement("div");
+  preds.className = "preds";
+  renderPredictions(preds, s);
+  card.append(title, sub, preds);
 }
 
 async function loadCloud(meta) {
@@ -437,6 +463,7 @@ function renderDetail() {
     : "Placed by hand in the 3D view.";
 
   renderRecordings(panel.querySelector(".d-recordings"), s, true);
+  renderPredictions(panel.querySelector(".d-preds"), s);
   const form = panel.querySelector(".d-form");
 
   // Box geometry: edits move the box in the 3D view straight away.
