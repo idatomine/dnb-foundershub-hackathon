@@ -1,0 +1,8 @@
+{
+  "room": {
+    "name": "Demo room",
+    "source": "polycam point cloud (5.11.2026.ply)",
+    "notes": "Objects are placed by hand in the dashboard (data/user_surfaces.json). Add scan-derived objects to 'surfaces' here if another tool produces them."
+  },
+  "surfaces": []
+}

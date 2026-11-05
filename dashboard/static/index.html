@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Room Materials</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div>
+      <h1 id="room-name">Room</h1>
+      <p id="room-source" class="muted"></p>
+    </div>
+    <div class="header-actions">
+      <span id="progress" class="muted"></span>
+      <a class="btn" href="/api/export/pyroomacoustics" download="room_absorption.json">Export for pyroomacoustics</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="plan-panel">
+      <div class="viewer-bar">
+        <h2>Scanned room</h2>
+        <button type="button" id="place-btn" class="btn">+ Place object</button>
+        <label class="small muted size-ctl">Point size <input type="range" id="point-size" min="0.01" max="0.12" step="0.005" value="0.05"></label>
+        <span id="viewer-hint" class="muted small">Drag to rotate, scroll to zoom, right-drag to pan. Click a box to select it.</span>
+      </div>
+      <div id="viewer" aria-label="3D point cloud of the scanned room"></div>
+      <p id="viewer-status" class="muted small"></p>
+      <h2>Objects</h2>
+      <ul id="object-list" class="object-list"></ul>
+    </section>
+
+    <section class="detail-panel" id="detail">
+      <p class="muted empty">Click <b>+ Place object</b>, then click the object in the 3D view. Or select one from the list.</p>
+    </section>
+  </main>
+
+  <template id="detail-template">
+    <div class="detail-head">
+      <h2 class="d-label"></h2>
+      <span class="badge d-source"></span>
+    </div>
+    <p class="muted d-cv"></p>
+
+    <form class="d-form">
+      <fieldset class="geom">
+        <legend>Object in the 3D scan (metres)</legend>
+        <div class="grid2">
+          <label>Label <input name="label"></label>
+          <label>Category
+            <select name="category">
+              <option>wall</option><option>floor</option><option>ceiling</option>
+              <option>window</option><option>door</option><option>furniture</option><option>other</option>
+            </select>
+          </label>
+        </div>
+        <div class="grid3">
+          <label>Centre x <input name="cx" type="number" step="0.05"></label>
+          <label>Centre y <input name="cy" type="number" step="0.05"></label>
+          <label>Centre z (up) <input name="cz" type="number" step="0.05"></label>
+          <label>Width <input name="sx" type="number" step="0.05" min="0.02"></label>
+          <label>Depth <input name="sy" type="number" step="0.05" min="0.02"></label>
+          <label>Height <input name="sz" type="number" step="0.05" min="0.02"></label>
+          <label>Rotation ° <input name="rot" type="number" step="5"></label>
+        </div>
+        <button type="button" class="btn danger d-delete">Delete object</button>
+      </fieldset>
+
+      <label>Start from a preset
+        <select name="preset"><option value="">— choose a typical material —</option></select>
+      </label>
+
+      <div class="grid2">
+        <label>Material <input name="material" placeholder="e.g. polyester curtain"></label>
+        <label>Fabric / composition <input name="fabric" placeholder="e.g. most likely polyester"></label>
+        <label>Friction coefficient <input name="friction_coeff" type="number" step="0.01" min="0"></label>
+        <label>Density (kg/m³) <input name="density_kg_m3" type="number" step="1" min="0"></label>
+        <label>Thickness (mm) <input name="thickness_mm" type="number" step="0.1" min="0"></label>
+        <label>Data source
+          <select name="source">
+            <option value="unmeasured">Unmeasured</option>
+            <option value="estimated">Estimated (literature table)</option>
+            <option value="manual">Manual entry</option>
+            <option value="rig_measured">Measured with rig</option>
+          </select>
+        </label>
+      </div>
+
+      <fieldset>
+        <legend>Absorption coefficient α per octave band</legend>
+        <div class="alpha-grid"></div>
+        <svg class="alpha-chart" role="img" aria-label="Absorption by frequency"></svg>
+        <p class="muted small">Bands above 4 kHz are outside what the rig can measure. Values from presets are typical literature figures, not measurements.</p>
+      </fieldset>
+
+      <label>Notes <textarea name="notes" rows="3"></textarea></label>
+
+      <div class="form-actions">
+        <button type="submit" class="btn primary">Save</button>
+        <span class="save-status muted"></span>
+      </div>
+    </form>
+  </template>
+
+  <script src="vendor/three.min.js"></script>
+  <script src="vendor/OrbitControls.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
