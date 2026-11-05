@@ -1,0 +1,15 @@
+# Test av oppsettet. Kort og moduler finnes i Big Kit ifølge atech.dev/buy, men sjekk esken.
+# Portene er ANTATT. Sett modulene i disse portene, eller endre dem her før opplasting.
+name: pipeline_demo
+board: 14port
+modules:
+  - {id: button,   instance: btn,  port: 1}
+  - {id: aht20,    instance: th,   port: 2}
+  - {id: neopixel, instance: led,  port: 3}
+code:
+  loop: |
+    // Knappen slukker lyset direkte i firmwaren, uten å vente på laptopen.
+    if (btn.wasPressed()) {
+      led.clear();
+      led.show();
+    }

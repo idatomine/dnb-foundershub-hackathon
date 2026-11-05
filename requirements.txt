@@ -1,0 +1,2 @@
+atech==1.0.0a12
+anthropic==2.5.0

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "atech": {
+      "type": "http",
+      "url": "https://atech.dev/mcp"
+    }
+  }
+}
