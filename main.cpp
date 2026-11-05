@@ -1,11 +1,13 @@
 // Acoustic measurement rig: exponential sine sweep out of the speaker,
-// simultaneous microphone capture held in memory; peak level reported (no storage).
+// simultaneous microphone capture held in memory; after each measurement the
+// full recording is streamed over USB as base64 JSON chunks (rec_begin / rec_chunk / rec_end).
 #include <Arduino.h>
 #include "transport.h"
 #include "esp_system.h"
 #include "esp_heap_caps.h"
 #include <driver/i2s.h>
 #include <math.h>
+#include "mbedtls/base64.h"
 #include "pins.h"
 #include "modules/shared/atech_helpers.h"
 #include "modules/audio/speaker.h"
@@ -44,6 +46,9 @@ static const uint32_t PRE_N     = PRE_ROLL_MS * SAMPLE_RATE / 1000;             
 static const uint32_t POST_N    = POST_ROLL_MS * SAMPLE_RATE / 1000;                 // 9600
 static const uint32_t REC_MAX_N = PRE_N + SWEEP_N + POST_N + DMA_LAG_SAMPLES + 4096;
 
+// ---------------- USB dump parameters ----------------
+static const uint32_t DUMP_CHUNK = 1024;   // samples per JSON line (2048 bytes -> 2732 base64 chars)
+
 static int16_t* sweepBuf = nullptr;
 static int16_t* recBuf = nullptr;
 static volatile uint32_t recCount = 0;
@@ -61,6 +66,8 @@ static char resultLabel[40];
 static int resultN = 0;
 static float resultPeakDb = 0;
 static int resultPeakRaw = 0;
+static uint32_t resultSamples = 0;     // number of recorded samples
+static uint32_t resultPlayStart = 0;   // sample index where playback was started
 
 // ---------------- helpers ----------------
 static void micTap(const int16_t* s, int count, void*) {
@@ -173,6 +180,8 @@ static void measureTask(void*) {
   resultN = ++runCounter;
   resultPeakRaw = peak;
   resultPeakDb = peak > 0 ? 20.0f * log10f(peak / 32768.0f) : -120.0f;
+  resultSamples = n;
+  resultPlayStart = playStart;
   resultReady = true;
   vTaskDelete(nullptr);
 }
@@ -188,6 +197,39 @@ static void requestMeasure(const char* label) {
   }
   strncpy(pendingLabel, label, sizeof(pendingLabel));
   startRequested = true;
+}
+
+// ---------------- stream the recording to the PC over USB ----------------
+// Sends: rec_begin (metadata) -> rec_chunk x N (base64 of little-endian int16) -> rec_end.
+// Runs from loop(), so nothing else (distance events etc.) is interleaved with the dump.
+static void dumpRecording(const char* label, int run, uint32_t n, uint32_t playStart) {
+  if (!recBuf || n == 0) return;
+  uint32_t chunks = (n + DUMP_CHUNK - 1) / DUMP_CHUNK;
+
+  Serial.setTxTimeoutMs(200);   // block briefly instead of silently dropping bytes during the dump
+  Serial.printf("{\"type\":\"event\",\"payload\":{\"key\":\"rec_begin\",\"value\":{\"label\":\"%s\",\"run\":%d,"
+                "\"samples\":%u,\"chunks\":%u,\"rate\":%u,\"play_start\":%u,\"sweep_n\":%u,"
+                "\"sweep_f1\":%.1f,\"sweep_f2\":%.1f,\"fade_s\":%.4f}}}\n",
+                label, run, (unsigned)n, (unsigned)chunks, (unsigned)SAMPLE_RATE, (unsigned)playStart,
+                (unsigned)SWEEP_N, SWEEP_F1, SWEEP_F2, FADE_SECONDS);
+
+  static unsigned char b64[((DUMP_CHUNK * 2 + 2) / 3) * 4 + 4];
+  for (uint32_t c = 0; c < chunks; c++) {
+    uint32_t start = c * DUMP_CHUNK;
+    uint32_t cnt = (n - start < DUMP_CHUNK) ? (n - start) : DUMP_CHUNK;
+    size_t olen = 0;
+    mbedtls_base64_encode(b64, sizeof(b64), &olen,
+                          (const unsigned char*)(recBuf + start), cnt * sizeof(int16_t));
+    Serial.printf("{\"type\":\"event\",\"payload\":{\"key\":\"rec_chunk\",\"value\":{\"run\":%d,\"i\":%u,\"d\":\"",
+                  run, (unsigned)c);
+    Serial.write(b64, olen);
+    Serial.print("\"}}}\n");
+    if ((c & 7) == 7) Serial.flush();
+  }
+  Serial.printf("{\"type\":\"event\",\"payload\":{\"key\":\"rec_end\",\"value\":{\"run\":%d,\"chunks\":%u}}}\n",
+                run, (unsigned)chunks);
+  Serial.flush();
+  Serial.setTxTimeoutMs(0);
 }
 
 static const char* resetReasonStr() {
@@ -269,17 +311,21 @@ void loop() {
 
   if (resultReady) {
     resultReady = false;
-    busy = false;
     char line2[48];
     snprintf(line2, sizeof(line2), "%s #%d", resultLabel, resultN);
     char pk[48];
     snprintf(pk, sizeof(pk), "%.1f dB", resultPeakDb);
-    showIdle(line2, pk, ST7735_TFT::COLOR_GREEN);
     char dj[16];
     if (lastDistMm < 0 || lastDistMm >= 32767) snprintf(dj, sizeof(dj), "null");
     else snprintf(dj, sizeof(dj), "%d", (int)lastDistMm);
-    Serial.printf("{\"type\":\"event\",\"payload\":{\"key\":\"measure_done\",\"value\":{\"label\":\"%s\",\"run\":%d,\"peak_level\":%.1f,\"peak_raw\":%d,\"distance_mm\":%s,\"saved\":false}}}\n",
+    Serial.printf("{\"type\":\"event\",\"payload\":{\"key\":\"measure_done\",\"value\":{\"label\":\"%s\",\"run\":%d,\"peak_level\":%.1f,\"peak_raw\":%d,\"distance_mm\":%s,\"saved\":\"usb\"}}}\n",
                   resultLabel, resultN, resultPeakDb, resultPeakRaw, dj);
+
+    showText("Sending...", line2, ST7735_TFT::COLOR_YELLOW);
+    dumpRecording(resultLabel, resultN, resultSamples, resultPlayStart);
+
+    busy = false;   // only accept a new measurement once the dump is finished
+    showIdle(line2, pk, ST7735_TFT::COLOR_GREEN);
   }
 
   // distance: refreshed twice a second, never redrawn over a running measurement

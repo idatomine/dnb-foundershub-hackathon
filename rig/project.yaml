@@ -1,0 +1,414 @@
+# Akustisk malerigg: spiller en eksponentiell sinussveip pa hoyttaleren, tar opp
+# mikrofonen samtidig, og sender hele opptaket til laptopen etterpa.
+#
+# Portene er de som star i CLAUDE.md, seksjon 2. Port 8 er USB-C og port 12 er
+# reset; ingen av dem tar moduler.
+name: rig
+board: 14port
+modules:
+  - {id: button,          instance: button,           port: 1}   # start en maling
+  - {id: button,          instance: button2,          port: 2}   # send siste opptak pa nytt
+  - {id: icm40608,        instance: icm40608,         port: 3}
+  - {id: st7735_tft,      instance: st7735_tft,       ports: [5, 6]}
+  - {id: speaker,         instance: speaker,          ports: [9, 10]}
+  - {id: distance_sensor, instance: distance_sensor,  port: 11}
+  - {id: microphone,      instance: microphone,       ports: [13, 14]}
+
+code:
+  globals: |
+    #include <driver/i2s.h>
+    #include <math.h>
+    #include "esp_heap_caps.h"
+
+    // ---------------- maleparametre ----------------
+    static const float    SWEEP_VOLUME  = 0.5f;    // 1.0 klipper
+    // Mikrofonens driver kjorer 16 kHz og hoyttalerens standard er den samme,
+    // sa begge gar i takt uten omklokking. Toppen av sveipen ma ligge under
+    // Nyquist (8 kHz), ellers folder den seg ned i opptaket.
+    static const uint32_t SAMPLE_RATE   = 16000;   // begge I2S-enhetene
+    static const float    SWEEP_F1      = 200.0f;
+    static const float    SWEEP_F2      = 7500.0f;
+    static const float    SWEEP_SECONDS = 0.8f;
+    static const float    FADE_SECONDS  = 0.010f;
+    static const uint32_t PRE_ROLL_MS   = 50;
+    static const uint32_t POST_ROLL_MS  = 200;
+    // sampler som fortsatt ligger i hoyttalerens DMA nar writeSamples() returnerer
+    static const uint32_t DMA_LAG_SAMPLES = 2048;
+
+    static const uint32_t SWEEP_N   = (uint32_t)(SWEEP_SECONDS * SAMPLE_RATE);
+    static const uint32_t PRE_N     = PRE_ROLL_MS * SAMPLE_RATE / 1000;
+    static const uint32_t POST_N    = POST_ROLL_MS * SAMPLE_RATE / 1000;
+    static const uint32_t REC_MAX_N = PRE_N + SWEEP_N + POST_N + DMA_LAG_SAMPLES + 4096;
+
+    static int16_t* sweepBuf = nullptr;
+    static int16_t* recBuf = nullptr;
+    static volatile uint32_t recCount = 0;
+    static volatile bool recActive = false;
+    static bool micOk = false;
+
+    // ---------------- overforing av opptaket ----------------
+    // 1024 sampler = 2048 byte = 2732 base64-tegn. Linjene er kappet pa 4096.
+    static const uint32_t CHUNK_SAMPLES = 1024;
+    static const uint32_t CHUNKS_PER_PASS = 4;     // per runde i loop(), sa den aldri henger
+
+    static char b64Buf[CHUNK_SAMPLES * 2 * 4 / 3 + 8];
+    static char lineBuf[sizeof(b64Buf) + 160];
+    static bool dumpActive = false;
+    static uint32_t dumpIndex = 0, dumpChunks = 0, dumpSamples = 0, dumpSum = 0;
+
+    static const char B64[] =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+    static size_t b64Encode(const uint8_t* in, size_t n, char* out) {
+      size_t j = 0;
+      for (size_t i = 0; i < n; i += 3) {
+        uint32_t v = (uint32_t)in[i] << 16;
+        if (i + 1 < n) v |= (uint32_t)in[i + 1] << 8;
+        if (i + 2 < n) v |= in[i + 2];
+        out[j++] = B64[(v >> 18) & 63];
+        out[j++] = B64[(v >> 12) & 63];
+        out[j++] = (i + 1 < n) ? B64[(v >> 6) & 63] : '=';
+        out[j++] = (i + 2 < n) ? B64[v & 63] : '=';
+      }
+      out[j] = 0;
+      return j;
+    }
+
+    // ---------------- tilstand ----------------
+    static EveryTimer distTimer;
+    static int16_t lastDistMm = -1;                // -1 = ukjent
+    static char lastPose[20] = "";
+    static float lastTilt = -999.0f;
+    static char idleL1[40] = "Ready";
+    static char idleL2[40] = "press button";
+    static uint16_t idleColor = ST7735_TFT::COLOR_GREEN;
+
+    static int runCounter = 0;
+    static volatile bool busy = false;
+    static char pendingLabel[40];
+    static volatile bool startRequested = false;
+
+    static volatile bool resultReady = false;
+    static char resultLabel[40];
+    static int resultN = 0;
+    static float resultPeakDb = 0;
+    static int resultPeakRaw = 0;
+    static uint32_t resultSamples = 0, resultPlayOffset = 0;
+    // Riggens stilling da malingen ble gjort. Leses i loop(), ikke i
+    // maletasken: modulene rores bare fra ett sted.
+    static float resultTilt = 0;
+    static char resultPose[20] = "unknown";
+
+    // Kopierer mikrofonens sampler inn i opptaksbufferet. Kjorer pa
+    // opptakstasken (kjerne 0): ingen Serial, ingen modulkall.
+    static void micTap(const int16_t* s, int count, void*) {
+      if (!recActive) return;
+      uint32_t c = recCount;
+      for (int i = 0; i < count && c < REC_MAX_N; i++) recBuf[c++] = s[i];
+      recCount = c;
+      if (c >= REC_MAX_N) recActive = false;
+    }
+
+    static void generateSweep() {
+      const double T = SWEEP_SECONDS;
+      const double L = log(SWEEP_F2 / SWEEP_F1);
+      const double K = 2.0 * M_PI * SWEEP_F1 * T / L;
+      const uint32_t fadeN = (uint32_t)(FADE_SECONDS * SAMPLE_RATE);
+      for (uint32_t i = 0; i < SWEEP_N; i++) {
+        double t = (double)i / SAMPLE_RATE;
+        double v = sin(K * (exp(t * L / T) - 1.0));
+        double g = 1.0;
+        if (i < fadeN) g = 0.5 - 0.5 * cos(M_PI * i / fadeN);
+        else if (i >= SWEEP_N - fadeN) g = 0.5 - 0.5 * cos(M_PI * (SWEEP_N - 1 - i) / fadeN);
+        sweepBuf[i] = (int16_t)lround(v * g * 32000.0);
+      }
+    }
+
+    // ---------------- skjerm ----------------
+    // 160x80 etter setRotation(3). To store linjer oppe til status, og nederst
+    // de to sensorlinjene: avstand og orientering.
+    static void distText(char* out, size_t n) {
+      if (lastDistMm < 0) snprintf(out, n, "Dist: --");
+      else if (lastDistMm >= 32767) snprintf(out, n, "Dist: none");
+      else snprintf(out, n, "Dist: %d mm", (int)lastDistMm);
+    }
+
+    static void poseText(char* out, size_t n) {
+      if (!icm40608.isConnected()) { snprintf(out, n, "Pose: --"); return; }
+      // getOrientationName() gir face_up / edge_left / ...; vinkelen ved siden
+      // skiller en rigg som star litt skjevt fra en som star rett.
+      snprintf(out, n, "%s  tilt %.0f", icm40608.getOrientationName(),
+               icm40608.getTiltAngle());
+    }
+
+    static void showText(const char* l1, const char* l2, uint16_t color) {
+      st7735_tft.clear();
+      st7735_tft.displayText(l1, 4, 6, 2, color);
+      if (l2 && l2[0]) st7735_tft.displayText(l2, 4, 28, 2, ST7735_TFT::COLOR_WHITE);
+      char d[24];
+      distText(d, sizeof(d));
+      st7735_tft.displayText(d, 4, 54, 1, ST7735_TFT::COLOR_CYAN);
+      char p[40];
+      poseText(p, sizeof(p));
+      st7735_tft.displayText(p, 4, 66, 1, ST7735_TFT::COLOR_CYAN);
+      st7735_tft.display();
+    }
+
+    // husker hva hvileskjermen sier, sa avstandslinjen kan tegnes pa nytt under den
+    static void showIdle(const char* l1, const char* l2, uint16_t color) {
+      strncpy(idleL1, l1, sizeof(idleL1) - 1);
+      strncpy(idleL2, l2 ? l2 : "", sizeof(idleL2) - 1);
+      idleColor = color;
+      showText(idleL1, idleL2, idleColor);
+    }
+
+    // ---------------- etiketter ----------------
+    static void sanitizeLabel(const char* in, char* out, size_t outSize) {
+      size_t j = 0;
+      for (size_t i = 0; in[i] && j + 1 < outSize && j < 24; i++) {
+        char c = in[i];
+        if (isalnum((unsigned char)c) || c == '-' || c == '_') out[j++] = c;
+        else if (c == ' ') out[j++] = '_';
+      }
+      out[j] = 0;
+      if (j == 0) strncpy(out, "meas", outSize);
+    }
+
+    // Henter "label":"..." ut av handlingens JSON-verdi (eller en bar streng)
+    static void labelFromValue(const char* v, char* out, size_t outSize) {
+      const char* k = strstr(v, "\"label\"");
+      char raw[48] = {0};
+      if (k) {
+        const char* q = strchr(k + 7, ':');
+        if (q) q = strchr(q, '"');
+        if (q) {
+          q++;
+          size_t j = 0;
+          while (*q && *q != '"' && j + 1 < sizeof(raw)) raw[j++] = *q++;
+          raw[j] = 0;
+        }
+      } else if (v[0] && v[0] != '{') {
+        strncpy(raw, v, sizeof(raw) - 1);
+      }
+      sanitizeLabel(raw, out, outSize);
+    }
+
+    // ---------------- malingen, pa sin egen task ----------------
+    static void measureTask(void*) {
+      char label[40];
+      strncpy(label, pendingLabel, sizeof(label));
+
+      // 1. opptaket starter; vent ut de 50 ms forspillet (talt i sampler)
+      recCount = 0;
+      recActive = true;
+      uint32_t t0 = millis();
+      while (recCount < PRE_N && millis() - t0 < 1000) vTaskDelay(1);
+      uint32_t playStart = recCount;
+
+      // 2. spill sveipen (blokkerer til siste bit ligger i DMA-en)
+      speaker.setVolume(SWEEP_VOLUME);
+      speaker.writeSamples(sweepBuf, SWEEP_N);
+      static const int16_t silence[256] = {0};
+      speaker.writeSamples(silence, 256);
+
+      // 3. fortsett opptaket 200 ms forbi sveipens slutt
+      uint32_t target = playStart + SWEEP_N + POST_N + DMA_LAG_SAMPLES;
+      if (target > REC_MAX_N) target = REC_MAX_N;
+      t0 = millis();
+      while (recCount < target && millis() - t0 < 3000) vTaskDelay(1);
+      recActive = false;
+      uint32_t n = recCount;
+
+      int peak = 0;
+      for (uint32_t i = 0; i < n; i++) { int a = abs((int)recBuf[i]); if (a > peak) peak = a; }
+
+      strncpy(resultLabel, label, sizeof(resultLabel));
+      resultN = ++runCounter;
+      resultPeakRaw = peak;
+      resultPeakDb = peak > 0 ? 20.0f * log10f(peak / 32768.0f) : -120.0f;
+      resultSamples = n;
+      resultPlayOffset = playStart;
+      resultReady = true;
+      vTaskDelete(nullptr);
+    }
+
+    // Starter overforingen av det som ligger i recBuf. Brukes bade rett etter
+    // en maling og nar knapp 2 ber om det samme opptaket en gang til.
+    static bool startDump() {
+      if (busy || dumpActive || resultSamples == 0 || !recBuf) return false;
+      dumpSamples = resultSamples;
+      dumpChunks = (dumpSamples + CHUNK_SAMPLES - 1) / CHUNK_SAMPLES;
+      dumpIndex = 0;
+      dumpSum = 0;
+      dumpActive = dumpChunks > 0;
+      if (!dumpActive) return false;
+
+      char dj[16];
+      if (lastDistMm < 0 || lastDistMm >= 32767) snprintf(dj, sizeof(dj), "null");
+      else snprintf(dj, sizeof(dj), "%d", (int)lastDistMm);
+
+      Serial.printf("{\"type\":\"event\",\"payload\":{\"event_type\":\"state\",\"key\":\"rec_begin\","
+                    "\"value\":{\"run\":%d,\"label\":\"%s\",\"rate\":%u,\"samples\":%u,\"bits\":16,"
+                    "\"chunks\":%u,\"peak_level\":%.1f,\"peak_raw\":%d,\"distance_mm\":%s,"
+                    "\"tilt\":%.1f,\"orientation\":\"%s\",\"play_offset\":%u,"
+                    "\"sweep_f1\":%.0f,\"sweep_f2\":%.0f,\"sweep_seconds\":%.3f}}}\n",
+                    resultN, resultLabel, (unsigned)SAMPLE_RATE, (unsigned)dumpSamples,
+                    (unsigned)dumpChunks, resultPeakDb, resultPeakRaw, dj,
+                    resultTilt, resultPose, (unsigned)resultPlayOffset,
+                    SWEEP_F1, SWEEP_F2, SWEEP_SECONDS);
+      return true;
+    }
+
+    static void requestMeasure(const char* label) {
+      if (busy || dumpActive) {
+        Serial.println("{\"type\":\"event\",\"payload\":{\"event_type\":\"state\",\"key\":\"measure_busy\",\"value\":true}}");
+        return;
+      }
+      if (!sweepBuf || !recBuf || !micOk) {
+        Serial.println("{\"type\":\"event\",\"payload\":{\"event_type\":\"state\",\"key\":\"measure_error\",\"value\":\"audio not ready\"}}");
+        return;
+      }
+      strncpy(pendingLabel, label, sizeof(pendingLabel));
+      startRequested = true;
+    }
+
+  setup: |
+    // Ingen omklokking av I2S: microphone.begin() og speaker.begin() satte
+    // begge 16 kHz, og en i2s_set_clk() til 48 kHz her ga bare stillhet.
+    micOk = true;
+    st7735_tft.setRotation(3);
+
+    // Skrivingene under dumpen ma ikke kastes nar verten henger etter, men de
+    // ma heller ikke fryse loop() for alltid om ingen lytter.
+    Serial.setTxTimeoutMs(250);
+
+    sweepBuf = (int16_t*)heap_caps_malloc(SWEEP_N * sizeof(int16_t), MALLOC_CAP_8BIT);
+    recBuf = (int16_t*)heap_caps_malloc(REC_MAX_N * sizeof(int16_t), MALLOC_CAP_8BIT);
+    if (sweepBuf) generateSweep();
+    microphone.onAudio(micTap, nullptr);
+    speaker.setVolume(SWEEP_VOLUME);
+
+    showIdle("Ready", "press button", ST7735_TFT::COLOR_GREEN);
+
+  loop: |
+    // --- maling bedt om fra laptopen, eller fra knappen ---
+    if (atech_action == "measure") {
+      char label[40];
+      labelFromValue(atech_value.c_str(), label, sizeof(label));
+      requestMeasure(label);
+      atechDone();
+    }
+    if (atech_action == "resend") {
+      // atechFail() setter bare grunnen; atechDone() er den som sender svaret.
+      if (!startDump()) atechFail("no recording to resend");
+      atechDone();
+    }
+
+    if (button.wasPressed()) requestMeasure("meas");
+
+    // Knapp 2: send siste opptak en gang til, om verten gikk glipp av det.
+    if (button2.wasPressed()) {
+      if (startDump()) showText("Resending...", resultLabel, ST7735_TFT::COLOR_CYAN);
+      else showIdle("Nothing yet", "measure first", ST7735_TFT::COLOR_YELLOW);
+    }
+
+    if (startRequested && !busy && !dumpActive) {
+      startRequested = false;
+      busy = true;
+      showText("Measuring...", pendingLabel, ST7735_TFT::COLOR_YELLOW);
+      if (xTaskCreatePinnedToCore(measureTask, "measure", 8192, nullptr, 3, nullptr, 1) != pdPASS) {
+        busy = false;
+        showIdle("Error", "no task", ST7735_TFT::COLOR_RED);
+      }
+    }
+
+    // --- malingen er ferdig: meld fra, og start overforingen ---
+    if (resultReady) {
+      resultReady = false;
+      busy = false;
+      char line2[48];
+      snprintf(line2, sizeof(line2), "%s #%d", resultLabel, resultN);
+      char pk[48];
+      snprintf(pk, sizeof(pk), "%.1f dB", resultPeakDb);
+      showIdle(line2, pk, ST7735_TFT::COLOR_GREEN);
+
+      char dj[16];
+      if (lastDistMm < 0 || lastDistMm >= 32767) snprintf(dj, sizeof(dj), "null");
+      else snprintf(dj, sizeof(dj), "%d", (int)lastDistMm);
+
+      // Stillingen hores med i malingen, sa den leses her og blir med videre.
+      if (icm40608.isConnected()) {
+        resultTilt = icm40608.getTiltAngle();
+        strncpy(resultPose, icm40608.getOrientationName(), sizeof(resultPose) - 1);
+        resultPose[sizeof(resultPose) - 1] = 0;
+      }
+
+      Serial.printf("{\"type\":\"event\",\"payload\":{\"event_type\":\"state\",\"key\":\"measure_done\","
+                    "\"value\":{\"label\":\"%s\",\"run\":%d,\"peak_level\":%.1f,\"peak_raw\":%d,"
+                    "\"distance_mm\":%s,\"tilt\":%.1f,\"orientation\":\"%s\",\"samples\":%u}}}\n",
+                    resultLabel, resultN, resultPeakDb, resultPeakRaw, dj,
+                    resultTilt, resultPose, (unsigned)resultSamples);
+
+      if (startDump()) showIdle("Sending...", line2, ST7735_TFT::COLOR_CYAN);
+    }
+
+    // --- overforingen: noen biter per runde, sa loop() aldri blokkerer lenge ---
+    if (dumpActive) {
+      for (uint32_t k = 0; k < CHUNKS_PER_PASS && dumpActive; k++) {
+        uint32_t off = dumpIndex * CHUNK_SAMPLES;
+        uint32_t count = dumpSamples - off;
+        if (count > CHUNK_SAMPLES) count = CHUNK_SAMPLES;
+        for (uint32_t i = 0; i < count; i++) dumpSum += (uint16_t)recBuf[off + i];
+
+        b64Encode((const uint8_t*)(recBuf + off), count * 2, b64Buf);
+        int n = snprintf(lineBuf, sizeof(lineBuf),
+                         "{\"type\":\"event\",\"payload\":{\"event_type\":\"log\",\"key\":\"rec_chunk\","
+                         "\"value\":{\"i\":%u,\"d\":\"%s\"}}}\n", (unsigned)dumpIndex, b64Buf);
+        // Hele linjen i en skriving: da kan ingen annen utskrift havne midt i den.
+        if (Serial.write((const uint8_t*)lineBuf, n) < (size_t)n) {
+          // Verten leser ikke. Avbryt heller enn a fryse resten av malingen.
+          dumpActive = false;
+          showIdle("Send failed", "host not reading", ST7735_TFT::COLOR_RED);
+          break;
+        }
+        dumpIndex++;
+        if (dumpIndex >= dumpChunks) {
+          dumpActive = false;
+          Serial.printf("{\"type\":\"event\",\"payload\":{\"event_type\":\"state\",\"key\":\"rec_end\","
+                        "\"value\":{\"run\":%d,\"chunks\":%u,\"checksum\":%u}}}\n",
+                        resultN, (unsigned)dumpChunks, (unsigned)dumpSum);
+          char line2[48];
+          snprintf(line2, sizeof(line2), "%s #%d", resultLabel, resultN);
+          showIdle(line2, "sent", ST7735_TFT::COLOR_GREEN);
+        }
+      }
+    }
+
+    // VL53L5CX bruker et par sekunder pa a vakne. Etter en varm reset rekker
+    // ikke begin() i setup() den alltid, og da star den som "not responding"
+    // selv om den er i orden. Prov en gang til nar den har fatt tid.
+    static bool distRetried = false;
+    if (!distance_sensor_ok && !distRetried && millis() > 3000) {
+      distRetried = true;
+      distance_sensor_ok = distance_sensor.begin();
+    }
+
+    // --- sensorlinjene: oppdateres to ganger i sekundet, aldri over en
+    //     pagaende maling eller overforing ---
+    if (distTimer.ready(500)) {
+      int16_t d = (distance_sensor_ok && distance_sensor.isReady())
+                    ? distance_sensor.getMinDistance() : -1;
+      // Orienteringen teller som endret forst nar den bytter navn eller
+      // vinkelen flytter seg merkbart: ellers blinker skjermen pa stoy.
+      const char* pose = icm40608.isConnected() ? icm40608.getOrientationName() : "";
+      float tilt = icm40608.isConnected() ? icm40608.getTiltAngle() : 0.0f;
+      bool poseChanged = strcmp(pose, lastPose) != 0 || fabsf(tilt - lastTilt) >= 2.0f;
+
+      if (d != lastDistMm || poseChanged) {
+        lastDistMm = d;
+        strncpy(lastPose, pose, sizeof(lastPose) - 1);
+        lastPose[sizeof(lastPose) - 1] = 0;
+        lastTilt = tilt;
+        if (!busy && !startRequested && !dumpActive) showText(idleL1, idleL2, idleColor);
+      }
+    }

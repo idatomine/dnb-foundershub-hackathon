@@ -1,0 +1,21 @@
+{
+  "run": 1,
+  "label": "rom_test",
+  "rate": 16000,
+  "samples": 19456,
+  "bits": 16,
+  "chunks": 19,
+  "peak_level": -8.9,
+  "peak_raw": 11828,
+  "distance_mm": 623,
+  "tilt": 0.8,
+  "orientation": "face_up",
+  "play_offset": 1024,
+  "sweep_f1": 200,
+  "sweep_f2": 7500,
+  "sweep_seconds": 0.8,
+  "file": "20261105_173344_rom_test_run001.wav",
+  "recorded_at": "2026-11-05T17:33:44+01:00",
+  "samples_received": 19456,
+  "duration_s": 1.216
+}
