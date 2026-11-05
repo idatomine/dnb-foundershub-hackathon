@@ -224,3 +224,18 @@ legend { font: 500 10.5px var(--mono); color: var(--accent); padding: 0 6px; tex
 .rec audio { width: 100%; margin-top: 4px; height: 32px; }
 .mock-tag { display: inline-block; font-size: 10px; padding: 0 6px; margin-right: 6px; border-radius: 999px; border: 1px solid var(--border); text-transform: uppercase; letter-spacing: 0.04em; }
 .rec canvas.spectro { width: 100%; height: auto; display: block; border-radius: 6px; border: 1px solid var(--border); }
+
+/* model probabilities */
+#hover-card h2 { margin: 0 0 2px; }
+.preds { display: flex; flex-direction: column; gap: 14px; margin: 14px 0 6px; }
+.pred-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 12px; margin-bottom: 6px; }
+.pred-head span:first-child { font-weight: 600; letter-spacing: 0.02em; }
+.pred-head .muted { font-size: 11px; }
+.pred-row { display: grid; grid-template-columns: 64px 1fr 38px; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); padding: 2px 0; }
+.pred-track { height: 8px; background: var(--panel-2, rgba(255,255,255,0.04)); border-radius: 4px; overflow: hidden; }
+.pred-bar { height: 100%; background: var(--muted); opacity: 0.55; border-radius: 4px; }
+.pred-row.best { color: var(--fg); }
+.pred-row.best .pred-bar { background: var(--accent); opacity: 1; }
+.pred-pct { text-align: right; font-variant-numeric: tabular-nums; }
+.pred-none { margin: 0; }
+.pred-verdict { margin: 0; font-size: 12px; color: var(--fg); border-top: 1px solid var(--border); padding-top: 10px; }
