@@ -1,0 +1,21 @@
+{
+  "run": 2,
+  "label": "meas",
+  "rate": 16000,
+  "samples": 19456,
+  "bits": 16,
+  "chunks": 19,
+  "peak_level": -10.8,
+  "peak_raw": 9470,
+  "distance_mm": 161,
+  "tilt": 177.1,
+  "orientation": "face_down",
+  "play_offset": 1024,
+  "sweep_f1": 200,
+  "sweep_f2": 7500,
+  "sweep_seconds": 0.8,
+  "file": "20261105_174821_meas_run002.wav",
+  "recorded_at": "2026-11-05T17:48:21+01:00",
+  "samples_received": 19456,
+  "duration_s": 1.216
+}
