@@ -4,3 +4,5 @@ __pycache__/
 .env
 **/build/
 .pio/
+.venv/
+captures/
