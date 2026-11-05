@@ -83,10 +83,11 @@ def checksum(pcm: bytes) -> int:
     return total
 
 
-def save(rec: Recording, pcm: bytes, out_dir: Path) -> Path:
+def save(rec: Recording, pcm: bytes, out_dir: Path, stem: str | None = None) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    stem = f"{stamp}_{rec.label}_run{rec.run:03d}"
+    if stem is None:
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        stem = f"{stamp}_{rec.label}_run{rec.run:03d}"
     wav_path = out_dir / f"{stem}.wav"
 
     with wave.open(str(wav_path), "wb") as wav:
@@ -110,7 +111,9 @@ def save(rec: Recording, pcm: bytes, out_dir: Path) -> Path:
     return wav_path
 
 
-def collect(board: Board, out_dir: Path, *, wait_for_begin: float) -> Path:
+def collect(
+    board: Board, out_dir: Path, *, wait_for_begin: float, stem: str | None = None
+) -> Path:
     """Vent pa ett opptak og skriv det til disk. Returner filstien."""
     rec: Recording | None = None
     deadline = time.monotonic() + wait_for_begin
@@ -160,7 +163,7 @@ def collect(board: Board, out_dir: Path, *, wait_for_begin: float) -> Path:
                 raise TransferError(
                     f"forventet {rec.expected} sampler, fikk {len(pcm) // 2}"
                 )
-            return save(rec, pcm, out_dir)
+            return save(rec, pcm, out_dir, stem)
 
 
 def main() -> int:
