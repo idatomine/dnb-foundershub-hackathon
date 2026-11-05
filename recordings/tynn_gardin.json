@@ -18,5 +18,16 @@
   "file": "tynn_gardin.wav",
   "recorded_at": "2026-11-05T18:08:24+01:00",
   "samples_received": 19456,
-  "duration_s": 1.216
+  "duration_s": 1.216,
+  "audio": {
+    "air": 0.1265,
+    "glass": 0.0345,
+    "metal": 0.0565,
+    "plastic": 0.1204,
+    "textile": 0.6223,
+    "wood": 0.0398
+  },
+  "audio_material": "textile",
+  "audio_confidence": 0.6223,
+  "audio_in_training_set": true
 }

@@ -18,5 +18,16 @@
   "file": "air.wav",
   "recorded_at": "2026-11-05T18:13:08+01:00",
   "samples_received": 19456,
-  "duration_s": 1.216
+  "duration_s": 1.216,
+  "audio": {
+    "air": 0.6676,
+    "glass": 0.0264,
+    "metal": 0.0289,
+    "plastic": 0.0679,
+    "textile": 0.1961,
+    "wood": 0.0131
+  },
+  "audio_material": "air",
+  "audio_confidence": 0.6676,
+  "audio_in_training_set": true
 }

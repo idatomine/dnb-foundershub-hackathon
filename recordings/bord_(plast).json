@@ -18,5 +18,16 @@
   "file": "bord_(plast).wav",
   "recorded_at": "2026-11-05T18:09:32+01:00",
   "samples_received": 19456,
-  "duration_s": 1.216
+  "duration_s": 1.216,
+  "audio": {
+    "air": 0.0613,
+    "glass": 0.0485,
+    "metal": 0.0557,
+    "plastic": 0.6452,
+    "textile": 0.0647,
+    "wood": 0.1246
+  },
+  "audio_material": "plastic",
+  "audio_confidence": 0.6452,
+  "audio_in_training_set": true
 }

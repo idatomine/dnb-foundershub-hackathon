@@ -18,5 +18,16 @@
   "file": "metal.wav",
   "recorded_at": "2026-11-05T18:11:10+01:00",
   "samples_received": 19456,
-  "duration_s": 1.216
+  "duration_s": 1.216,
+  "audio": {
+    "air": 0.1293,
+    "glass": 0.0815,
+    "metal": 0.451,
+    "plastic": 0.0892,
+    "textile": 0.2107,
+    "wood": 0.0383
+  },
+  "audio_material": "metal",
+  "audio_confidence": 0.451,
+  "audio_in_training_set": true
 }

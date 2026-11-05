@@ -17,5 +17,15 @@
   "file": "20261105_175001_meas_run006.wav",
   "recorded_at": "2026-11-05T17:50:01+01:00",
   "samples_received": 19456,
-  "duration_s": 1.216
+  "duration_s": 1.216,
+  "audio": {
+    "air": 0.3455,
+    "glass": 0.0725,
+    "metal": 0.0377,
+    "plastic": 0.2292,
+    "textile": 0.2388,
+    "wood": 0.0762
+  },
+  "audio_material": "air",
+  "audio_confidence": 0.3455
 }

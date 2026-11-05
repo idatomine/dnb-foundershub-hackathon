@@ -34,12 +34,22 @@
       </details>
     </section>
 
-    <section class="detail-panel">
-      <div id="hover-card" hidden></div>
-      <div id="detail">
-        <p class="muted empty">Hover over an object in the 3D view to see its data. Click it to edit.</p>
-      </div>
-    </section>
+    <div class="right-col">
+      <section class="live-panel">
+        <div class="live-head">
+          <h2>Latest measurement</h2>
+          <span id="live-status" class="muted small">waiting…</span>
+        </div>
+        <div id="live-body"></div>
+      </section>
+
+      <section class="detail-panel">
+        <div id="hover-card" hidden></div>
+        <div id="detail">
+          <p class="muted empty">Hover over an object in the 3D view to see its data. Click it to edit.</p>
+        </div>
+      </section>
+    </div>
   </main>
 
   <template id="detail-template">

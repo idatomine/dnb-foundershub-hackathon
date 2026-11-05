@@ -83,6 +83,58 @@ def _probabilities(raw) -> dict | None:
     return out or None
 
 
+def _build_record(prefix: str, stem: str, related: list[str], meta: dict,
+                  is_mock: bool = False) -> dict:
+    """One recording as the browser sees it: file urls, metadata, model output."""
+    def url(ext):
+        return next((f"/{prefix}/{quote(f)}" for f in related if f.lower().endswith(ext)), None)
+    predictions = {}
+    for model, keys in MODEL_KEYS.items():
+        probs = next((p for p in (_probabilities(meta.get(k)) for k in keys) if p), None)
+        if probs:
+            predictions[model] = probs
+    return {
+        "id": f"{prefix}/{stem}",
+        "spectrogram": url(".png"),
+        "audio": url(".wav"),
+        "image": url(".jpg"),
+        "meta": {k: meta[k] for k in RECORDING_META_KEYS if k in meta},
+        "predictions": predictions,
+        "mock": is_mock,
+    }
+
+
+def latest_recording() -> dict | None:
+    """The newest recording in any folder, whether or not it belongs to an object.
+
+    This is what the live panel shows: a measurement appears the moment it is
+    written, without anyone having to link it or click anything.
+    """
+    newest = None
+    for prefix, folder in RECORDING_DIRS.items():
+        if not folder.is_dir():
+            continue
+        files = sorted(p.name for p in folder.iterdir())
+        for meta_path in folder.glob("*.json"):
+            try:
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                continue
+            if not isinstance(meta, dict):
+                continue
+            stem = meta_path.stem
+            related = [f for f in files if f.rsplit(".", 1)[0] == stem or f.startswith(stem + "_")]
+            # Sort on the recording's own timestamp, falling back to the file's,
+            # so renamed files keep their place in time.
+            when = meta.get("recorded_at") or ""
+            key = (when, meta_path.stat().st_mtime)
+            if newest is None or key > newest[0]:
+                record = _build_record(prefix, stem, related, meta)
+                record["object"] = meta.get("object")
+                newest = (key, record)
+    return newest[1] if newest else None
+
+
 def load_recordings(surface_ids: set[str]) -> dict[str, list]:
     """Group rig recordings by object. A recording belongs to an object when its JSON has
     "object": "<id>", when data/recording_links.json maps its file stem to one or more ids,
@@ -115,21 +167,7 @@ def load_recordings(surface_ids: set[str]) -> dict[str, list]:
                 targets = [hit] if hit else []
             if not targets:
                 continue
-            url = lambda ext: next((f"/{prefix}/{quote(f)}" for f in related if f.lower().endswith(ext)), None)
-            predictions = {}
-            for model, keys in MODEL_KEYS.items():
-                probs = next((p for p in (_probabilities(meta.get(k)) for k in keys) if p), None)
-                if probs:
-                    predictions[model] = probs
-            record = {
-                "id": f"{prefix}/{stem}",
-                "spectrogram": url(".png"),
-                "audio": url(".wav"),
-                "image": url(".jpg"),
-                "meta": {k: meta[k] for k in RECORDING_META_KEYS if k in meta},
-                "predictions": predictions,
-                "mock": is_mock,
-            }
+            record = _build_record(prefix, stem, related, meta, is_mock)
             for target in targets:
                 by_object.setdefault(target, []).append(record)
     for records in by_object.values():
@@ -294,6 +332,9 @@ class Handler(BaseHTTPRequestHandler):
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
+        # Without this the browser caches API replies by its own heuristics, and
+        # the live panel keeps polling its way back to the same stale answer.
+        self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -319,6 +360,9 @@ class Handler(BaseHTTPRequestHandler):
         body = file_path.read_bytes()
         self.send_response(200)
         self.send_header("Content-Type", content_type)
+        # Edited constantly while developing; a cached copy means the browser
+        # keeps running yesterday's page until someone hard-reloads.
+        self.send_header("Cache-Control", "no-cache")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -342,6 +386,8 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/api/room":
             self._send_json(load_room())
+        elif parsed.path == "/api/latest":
+            self._send_json(latest_recording() or {})
         elif parsed.path == "/api/materials":
             self._send_json(_load_json(MATERIALS_PATH, {"presets": []}))
         elif parsed.path == "/api/cloud" and CLOUD_PATH.exists():

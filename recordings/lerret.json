@@ -18,5 +18,16 @@
   "file": "lerret.wav",
   "recorded_at": "2026-11-05T18:11:36+01:00",
   "samples_received": 19456,
-  "duration_s": 1.216
+  "duration_s": 1.216,
+  "audio": {
+    "air": 0.1258,
+    "glass": 0.1005,
+    "metal": 0.0458,
+    "plastic": 0.0348,
+    "textile": 0.5658,
+    "wood": 0.1273
+  },
+  "audio_material": "textile",
+  "audio_confidence": 0.5658,
+  "audio_in_training_set": true
 }

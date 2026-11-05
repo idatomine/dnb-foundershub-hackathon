@@ -18,5 +18,16 @@
   "file": "glass.wav",
   "recorded_at": "2026-11-05T18:07:50+01:00",
   "samples_received": 19456,
-  "duration_s": 1.216
+  "duration_s": 1.216,
+  "audio": {
+    "air": 0.0399,
+    "glass": 0.4779,
+    "metal": 0.0226,
+    "plastic": 0.1869,
+    "textile": 0.0451,
+    "wood": 0.2276
+  },
+  "audio_material": "glass",
+  "audio_confidence": 0.4779,
+  "audio_in_training_set": true
 }

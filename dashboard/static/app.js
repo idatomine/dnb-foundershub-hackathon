@@ -101,6 +101,16 @@ function renderRecordings(container, s, withAudio) {
   for (const r of recs) {
     const fig = document.createElement("figure");
     fig.className = "rec";
+    // The photo the camera model judged. Without it there is no way to see
+    // what the camera was actually pointed at when it made its guess.
+    if (r.image) {
+      const photo = document.createElement("img");
+      photo.className = "rec-photo";
+      photo.src = r.image;
+      photo.alt = `Photo taken with ${r.id}`;
+      photo.loading = "lazy";
+      fig.appendChild(photo);
+    }
     if (r.audio) {
       const canvas = document.createElement("canvas");
       canvas.className = "spectro";
@@ -131,6 +141,25 @@ function renderRecordings(container, s, withAudio) {
       cap.prepend(tag);
     }
     fig.appendChild(cap);
+    // What each model made of this one measurement. The panel above shows only
+    // the newest result per object, so without this a older measurement's own
+    // numbers are invisible.
+    const guesses = MODELS
+      .map(m => [m, r.predictions?.[m.key]])
+      .filter(([, probs]) => probs);
+    if (guesses.length) {
+      const line = document.createElement("p");
+      line.className = "rec-guesses small";
+      for (const [model, probs] of guesses) {
+        const best = topMaterial(probs);
+        const span = document.createElement("span");
+        span.className = "rec-guess";
+        span.textContent = `${model.key === "vision" ? "Camera" : "Sound"}: `
+          + `${MATERIAL_LABELS[best] || best} ${Math.round(probs[best] * 100)}%`;
+        line.appendChild(span);
+      }
+      fig.appendChild(line);
+    }
     if (withAudio && r.audio) {
       const audio = document.createElement("audio");
       audio.controls = true; audio.preload = "none"; audio.src = r.audio;
@@ -599,7 +628,121 @@ function drawAlphaChart(form) {
   });
 }
 
+/* ---- live panel: the newest measurement, no clicking required ---- */
+
+// Bars for one model, reusing the same row markup as the per-object panel.
+function liveModelBlock(model, probs) {
+  const block = document.createElement("div");
+  block.className = "pred";
+  const head = document.createElement("div");
+  head.className = "pred-head";
+  const name = document.createElement("span");
+  name.textContent = model.label;
+  const best = document.createElement("span");
+  best.className = "muted";
+  const top = topMaterial(probs);
+  best.textContent = `${MATERIAL_LABELS[top] || top} ${Math.round(probs[top] * 100)}%`;
+  head.append(name, best);
+  block.appendChild(head);
+  const keys = [...MATERIAL_ORDER.filter(k => k in probs),
+                ...Object.keys(probs).filter(k => !MATERIAL_ORDER.includes(k))];
+  for (const k of keys) {
+    const row = document.createElement("div");
+    row.className = "pred-row" + (k === top ? " best" : "");
+    const label = document.createElement("span");
+    label.textContent = MATERIAL_LABELS[k] || k;
+    const track = document.createElement("div");
+    track.className = "pred-track";
+    const bar = document.createElement("div");
+    bar.className = "pred-bar";
+    bar.style.width = `${Math.max(0, Math.min(1, probs[k])) * 100}%`;
+    track.appendChild(bar);
+    const pct = document.createElement("span");
+    pct.className = "pred-pct";
+    pct.textContent = `${Math.round(probs[k] * 100)}%`;
+    row.append(label, track, pct);
+    block.appendChild(row);
+  }
+  return block;
+}
+
+let liveShownId = null;
+
+function renderLive(rec) {
+  const body = document.getElementById("live-body");
+  const status = document.getElementById("live-status");
+  if (!rec || !rec.id) {
+    body.replaceChildren();
+    status.textContent = "no measurements yet";
+    return;
+  }
+  // Redraw only on a new measurement, so the photo does not flicker on every poll.
+  if (rec.id === liveShownId) return;
+  liveShownId = rec.id;
+
+  const m = rec.meta || {};
+  status.textContent = m.recorded_at
+    ? new Date(m.recorded_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    : rec.id;
+
+  body.replaceChildren();
+  if (rec.image) {
+    const img = document.createElement("img");
+    img.className = "live-photo";
+    img.src = rec.image;
+    img.alt = "Photo from the latest measurement";
+    body.appendChild(img);
+  }
+
+  const facts = [];
+  if (rec.object) facts.push(rec.object);
+  if (m.distance_mm != null) facts.push(`${m.distance_mm} mm`);
+  if (m.peak_level != null) facts.push(`peak ${m.peak_level} dB`);
+  if (facts.length) {
+    const p = document.createElement("p");
+    p.className = "muted small";
+    p.textContent = facts.join(" · ");
+    body.appendChild(p);
+  }
+
+  const preds = rec.predictions || {};
+  const wrap = document.createElement("div");
+  wrap.className = "preds";
+  let any = false;
+  for (const model of MODELS) {
+    if (!preds[model.key]) continue;
+    wrap.appendChild(liveModelBlock(model, preds[model.key]));
+    any = true;
+  }
+  body.appendChild(wrap);
+
+  if (any && preds.vision && preds.sound) {
+    const verdict = document.createElement("p");
+    verdict.className = "pred-verdict";
+    const tv = topMaterial(preds.vision), ta = topMaterial(preds.sound);
+    verdict.textContent = tv === ta
+      ? `Both models say ${MATERIAL_LABELS[tv] || tv}.`
+      : `Models disagree: camera says ${MATERIAL_LABELS[tv] || tv}, sound says ${MATERIAL_LABELS[ta] || ta}.`;
+    body.appendChild(verdict);
+  }
+}
+
+async function pollLive() {
+  try {
+    const rec = await (await fetch("/api/latest")).json();
+    // Checked before renderLive, which updates liveShownId itself.
+    const fresh = rec && rec.id && rec.id !== liveShownId;
+    renderLive(rec);
+    // A new measurement may also belong to an object; keep that panel current.
+    if (fresh && rec.object) await reloadRoom();
+  } catch {
+    document.getElementById("live-status").textContent = "server unreachable";
+  }
+}
+
 init();
+pollLive();
+setInterval(pollLive, 2000);
 
 // ---------- spectrograms drawn from the WAV, so they follow the dark theme ----------
 const MAGMA = [[0, 0, 4], [28, 16, 68], [79, 18, 123], [129, 37, 129], [181, 54, 122],

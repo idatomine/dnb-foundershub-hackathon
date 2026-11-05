@@ -1,13 +1,18 @@
 """Ett knappetrykk -> lydopptak + bilde + materialgjetning, alt i malinger/.
 
-    python maaling.py                      # vent pa knapp 1 pa kortet
-    python maaling.py --merkelapp gardin   # gi malingene et navn
-    python maaling.py --trigg              # start fra laptopen i stedet for knappen
-    python maaling.py --antall 5           # stopp etter fem malinger
+    python maaling.py                        # vent pa knapp 1 pa kortet
+    python maaling.py --merkelapp gardin     # gi malingene et navn
+    python maaling.py --objekt gardin_mork   # knytt dem til et objekt i dashbordet
+    python maaling.py --trigg                # start fra laptopen i stedet for knappen
+    python maaling.py --antall 5             # stopp etter fem malinger
 
 Trykk pa knappen i port 1: kortet spiller sveipen og sender opptaket hit, sa
-tas det et bilde med webkameraet, og CLIP-modellen gjetter materialet ut fra
-det bildet. Hver maling gir fire filer med samme navn i malinger/:
+tas det et bilde med webkameraet. Begge modellene gjetter materialet - CLIP fra
+bildet, random forest fra lyden - og begge sannsynlighetene skrives inn i
+JSON-fila som "vision" og "audio". Med --objekt dukker malingen opp pa
+dashbordet (http://localhost:8765) med bildet og begge gjetningene.
+
+Hver maling gir fire filer med samme navn i malinger/:
 
     <navn>.wav    lyden
     <navn>.json   maledata fra kortet + materialgjetningen
@@ -104,7 +109,9 @@ def klassifiser_lyd(bundle, wav_sti: Path) -> dict:
     return sannsyn
 
 
-def skriv_resultat(wav: Path, bilde: Path, syn: dict, lyd: dict | None) -> None:
+def skriv_resultat(
+    wav: Path, bilde: Path, syn: dict, lyd: dict | None, objekt: str | None = None
+) -> None:
     """Legger begge gjetningene inn i opptakets JSON-fil."""
     meta_sti = wav.with_suffix(".json")
     meta = json.loads(meta_sti.read_text(encoding="utf-8"))
@@ -117,6 +124,10 @@ def skriv_resultat(wav: Path, bilde: Path, syn: dict, lyd: dict | None) -> None:
             "vision_confidence": round(syn[beste_syn], 4),
         }
     )
+    if objekt:
+        # Dashbordet knytter opptaket til dette objektet. "object" er regelen
+        # serveren sjekker forst, sa den slar alt i recording_links.json.
+        meta["object"] = objekt
     if lyd:
         beste_lyd = max(lyd, key=lyd.get)
         meta.update(
@@ -132,7 +143,8 @@ def skriv_resultat(wav: Path, bilde: Path, syn: dict, lyd: dict | None) -> None:
 
 
 def en_maling(
-    board: Board, stem: str, out_dir: Path, kamera: int, vent: float, bundle
+    board: Board, stem: str, out_dir: Path, kamera: int, vent: float, bundle,
+    objekt: str | None = None,
 ) -> Path:
     """Tar imot ett opptak, tar bildet, klassifiserer begge og skriver til disk."""
     wav = rig_recieve.collect(board, out_dir, wait_for_begin=vent, stem=stem)
@@ -143,7 +155,7 @@ def en_maling(
     syn = klassifiser_bilde(siste_bilde(out_dir))
     lyd = klassifiser_lyd(bundle, siste_opptak(out_dir)) if bundle else None
 
-    skriv_resultat(wav, bilde, syn, lyd)
+    skriv_resultat(wav, bilde, syn, lyd, objekt)
     plot_recording.plot(wav, show=False)
     return wav
 
@@ -160,6 +172,12 @@ def main() -> int:
     )
     parser.add_argument("--antall", type=int, default=0, help="stopp etter N malinger")
     parser.add_argument("--kamera", type=int, default=0, help="kameraindeks")
+    parser.add_argument(
+        "--objekt",
+        default=None,
+        help="id-en til objektet i dashbordet, f.eks. gardin_mork. Da dukker "
+             "malingen opp der av seg selv.",
+    )
     parser.add_argument("--port", default=None, help="f.eks. COM3")
     parser.add_argument("--out", default=str(OUT_DIR), help="mappe for malingene")
     parser.add_argument(
@@ -215,6 +233,7 @@ def main() -> int:
                         args.kamera,
                         vent=3600.0 if not args.trigg else rig_recieve.BEGIN_TIMEOUT,
                         bundle=bundle,
+                        objekt=args.objekt,
                     )
                 except rig_recieve.TransferError as exc:
                     # En tapt maling skal ikke rive ned lyttingen: meld fra og

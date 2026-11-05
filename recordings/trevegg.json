@@ -18,5 +18,16 @@
   "file": "trevegg.wav",
   "recorded_at": "2026-11-05T18:12:29+01:00",
   "samples_received": 19456,
-  "duration_s": 1.216
+  "duration_s": 1.216,
+  "audio": {
+    "air": 0.1359,
+    "glass": 0.0698,
+    "metal": 0.0181,
+    "plastic": 0.0359,
+    "textile": 0.0634,
+    "wood": 0.677
+  },
+  "audio_material": "wood",
+  "audio_confidence": 0.677,
+  "audio_in_training_set": true
 }

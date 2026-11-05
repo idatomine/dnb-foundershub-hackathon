@@ -1,0 +1,42 @@
+{
+  "run": 1,
+  "label": "dash",
+  "rate": 16000,
+  "samples": 19456,
+  "bits": 16,
+  "chunks": 19,
+  "peak_level": -10.2,
+  "peak_raw": 10091,
+  "distance_mm": 26,
+  "tilt": 51.9,
+  "orientation": "edge_right",
+  "play_offset": 1024,
+  "sweep_f1": 200,
+  "sweep_f2": 7500,
+  "sweep_seconds": 0.8,
+  "file": "20261105_191051_dash_001.wav",
+  "recorded_at": "2026-11-05T19:10:52+01:00",
+  "samples_received": 19456,
+  "duration_s": 1.216,
+  "image": "20261105_191051_dash_001.jpg",
+  "vision": {
+    "textile": 0.358,
+    "metal": 0.1338,
+    "wood": 0.1336,
+    "plastic": 0.3178,
+    "glass": 0.0568
+  },
+  "vision_material": "textile",
+  "vision_confidence": 0.358,
+  "object": "gardin_mork",
+  "audio": {
+    "air": 0.0903,
+    "glass": 0.0758,
+    "metal": 0.0521,
+    "plastic": 0.5386,
+    "textile": 0.1737,
+    "wood": 0.0693
+  },
+  "audio_material": "plastic",
+  "audio_confidence": 0.5386
+}

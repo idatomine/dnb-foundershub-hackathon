@@ -28,5 +28,16 @@
     "glass": 0.1064
   },
   "vision_material": "textile",
-  "vision_confidence": 0.6749
+  "vision_confidence": 0.6749,
+  "audio": {
+    "air": 0.1235,
+    "glass": 0.0103,
+    "metal": 0.029,
+    "plastic": 0.0793,
+    "textile": 0.7488,
+    "wood": 0.0091
+  },
+  "audio_material": "textile",
+  "audio_confidence": 0.7488,
+  "audio_in_training_set": true
 }

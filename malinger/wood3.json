@@ -28,5 +28,16 @@
     "glass": 0.0024
   },
   "vision_material": "wood",
-  "vision_confidence": 0.9913
+  "vision_confidence": 0.9913,
+  "audio": {
+    "air": 0.0351,
+    "glass": 0.1279,
+    "metal": 0.0159,
+    "plastic": 0.0411,
+    "textile": 0.0464,
+    "wood": 0.7338
+  },
+  "audio_material": "wood",
+  "audio_confidence": 0.7338,
+  "audio_in_training_set": true
 }

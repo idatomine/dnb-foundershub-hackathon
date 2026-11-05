@@ -75,8 +75,18 @@ main {
   gap: 18px; padding: 20px 28px 32px;
   align-items: start; /* cards keep their own height; hover content in one no longer stretches the other */
 }
-.detail-panel { position: sticky; top: 78px; max-height: calc(100vh - 96px); overflow-y: auto; }
-@media (max-width: 860px) { .detail-panel { position: static; max-height: none; } }
+/* Right column holds two independent cards: the live measurement stays put at
+   the top, the object detail scrolls on its own underneath it. */
+.right-col {
+  position: sticky; top: 78px; max-height: calc(100vh - 96px);
+  display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 18px;
+}
+.detail-panel { overflow-y: auto; min-height: 0; }
+.live-panel { overflow-y: auto; max-height: 52vh; }
+@media (max-width: 860px) {
+  .right-col { position: static; max-height: none; grid-template-rows: auto auto; }
+  .live-panel { max-height: none; }
+}
 @media (max-width: 860px) { main { grid-template-columns: 1fr; padding: 16px; } }
 section {
   background: linear-gradient(180deg, var(--panel), var(--bg-2));
@@ -224,6 +234,16 @@ legend { font: 500 10.5px var(--mono); color: var(--accent); padding: 0 6px; tex
 .rec audio { width: 100%; margin-top: 4px; height: 32px; }
 .mock-tag { display: inline-block; font-size: 10px; padding: 0 6px; margin-right: 6px; border-radius: 999px; border: 1px solid var(--border); text-transform: uppercase; letter-spacing: 0.04em; }
 .rec canvas.spectro { width: 100%; height: auto; display: block; border-radius: 6px; border: 1px solid var(--border); }
+/* The photo the camera model judged, above its spectrogram. Capped so a tall
+   portrait shot cannot push the rest of the measurement out of view. */
+.rec-photo { max-height: 190px; object-fit: cover; margin-bottom: 4px; }
+.rec-guesses { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 0; }
+.rec-guess { padding: 1px 8px; border-radius: 999px; border: 1px solid var(--border); }
+
+/* live panel: newest measurement, always visible, no selection needed */
+.live-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.live-head h2 { margin: 0; font-size: 15px; }
+.live-photo { width: 100%; max-height: 240px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); display: block; margin: 8px 0 6px; }
 
 /* model probabilities */
 #hover-card h2 { margin: 0 0 2px; }
