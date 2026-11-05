@@ -434,20 +434,40 @@ def train(data: Path, out: Path, n_trees: int, max_folds: int) -> None:
     print(f"\nModel and reports saved to: {out.resolve()}")
 
 
-def predict(model_path: Path, wav_path: Path) -> None:
+def load_bundle(model_path: Path) -> dict:
+    """Load a trained model bundle. Only load a joblib file you trust."""
     if not model_path.is_file():
         raise ValueError(f"Model not found: {model_path}. Train it first.")
-    bundle = joblib.load(model_path)  # Only load a joblib file you trust.
+    bundle = joblib.load(model_path)
     if bundle.get("version") != 1:
         raise ValueError("Unsupported model format.")
+    return bundle
+
+
+def predict_proba(bundle: dict, wav_path: Path) -> dict[str, float]:
+    """Class vote fractions per material for one recording, summing to 1.
+
+    These are Random Forest vote fractions, not calibrated probabilities.
+    Pass a bundle from load_bundle() so callers classifying many recordings
+    read the model from disk once.
+    """
     meta = load_metadata(wav_path)
     feat = extract_features(wav_path, meta)
     names = bundle["feature_names"]
     vector = np.array([[feat[name] for name in names]], dtype=np.float64)
     model = bundle["model"]
-    label = str(model.predict(vector)[0])
-    probabilities = model.predict_proba(vector)[0]
-    ranking = sorted(zip(model.classes_, probabilities), key=lambda x: -x[1])
+    return {
+        str(cls): float(score)
+        for cls, score in zip(model.classes_, model.predict_proba(vector)[0])
+    }
+
+
+def predict(model_path: Path, wav_path: Path) -> None:
+    bundle = load_bundle(model_path)
+    meta = load_metadata(wav_path)
+    scores = predict_proba(bundle, wav_path)
+    ranking = sorted(scores.items(), key=lambda x: -x[1])
+    label = ranking[0][0]
     print(f"Recording: {wav_path}")
     if meta.get("distance_mm") is not None:
         distance = float(meta["distance_mm"])

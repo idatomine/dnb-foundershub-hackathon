@@ -1,0 +1,42 @@
+{
+  "material": "plastic",
+  "run": 5,
+  "label": "meas",
+  "rate": 16000,
+  "samples": 19456,
+  "bits": 16,
+  "chunks": 19,
+  "peak_level": -9.3,
+  "peak_raw": 11215,
+  "distance_mm": 129,
+  "tilt": 166.3,
+  "orientation": "face_down",
+  "play_offset": 1024,
+  "sweep_f1": 200,
+  "sweep_f2": 7500,
+  "sweep_seconds": 0.8,
+  "file": "20261105_185724_maaling_005.wav",
+  "recorded_at": "2026-11-05T18:57:29+01:00",
+  "samples_received": 19456,
+  "duration_s": 1.216,
+  "image": "20261105_185724_maaling_005.jpg",
+  "vision": {
+    "textile": 0.0251,
+    "metal": 0.0324,
+    "wood": 0.8728,
+    "plastic": 0.0536,
+    "glass": 0.016
+  },
+  "vision_material": "wood",
+  "vision_confidence": 0.8728,
+  "audio": {
+    "air": 0.1816,
+    "glass": 0.0954,
+    "metal": 0.1702,
+    "plastic": 0.2456,
+    "textile": 0.18,
+    "wood": 0.1272
+  },
+  "audio_material": "plastic",
+  "audio_confidence": 0.2456
+}

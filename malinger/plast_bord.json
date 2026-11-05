@@ -1,4 +1,5 @@
 {
+  "material": "plastic",
   "run": 4,
   "label": "meas",
   "rate": 16000,

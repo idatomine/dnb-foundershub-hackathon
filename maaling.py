@@ -40,7 +40,20 @@ import rig_recieve
 # her, ikke per maling.
 import vision_material
 
-OUT_DIR = Path(__file__).resolve().parent / "malinger"
+ROOT = Path(__file__).resolve().parent
+OUT_DIR = ROOT / "malinger"
+
+# Lydklassifikatoren ligger i en undermappe uten pakkefil.
+sys.path.insert(0, str(ROOT / "material_classifier"))
+import material_classifier  # noqa: E402
+
+LYDMODELL = ROOT / "material_classifier" / "results" / "material_rf.joblib"
+
+# Lydmodellen har klassen "air" i tillegg til synsmodellens fem.
+NORSK = {
+    "textile": "TEKSTIL", "metal": "METALL", "wood": "TRE",
+    "plastic": "PLAST", "glass": "GLASS", "air": "LUFT",
+}
 
 
 def siste_bilde(mappe: Path) -> Path:
@@ -51,6 +64,20 @@ def siste_bilde(mappe: Path) -> Path:
     return max(bilder, key=lambda p: p.stat().st_mtime)
 
 
+def siste_opptak(mappe: Path) -> Path:
+    """Det nyeste lydopptaket i mappa. Lydmodellen jobber alltid pa det siste."""
+    opptak = list(mappe.glob("*.wav"))
+    if not opptak:
+        raise FileNotFoundError(f"ingen opptak i {mappe}")
+    return max(opptak, key=lambda p: p.stat().st_mtime)
+
+
+def rangert(sannsyn: dict) -> str:
+    """F.eks. 'METALL 38.4% | TEKSTIL 22.2% | ...', hoyest forst."""
+    rekke = sorted(sannsyn.items(), key=lambda par: -par[1])
+    return " | ".join(f"{NORSK.get(k, k.upper())} {v * 100:.1f}%" for k, v in rekke)
+
+
 def ta_bilde(stem: str, out_dir: Path, kamera: int) -> Path:
     """Tar ett bilde og lagrer det ved siden av opptaket."""
     bilde = vision_material.capture_webcam_image(kamera)
@@ -59,43 +86,64 @@ def ta_bilde(stem: str, out_dir: Path, kamera: int) -> Path:
     return sti
 
 
-def klassifiser(bilde_sti: Path) -> dict:
-    """Materialsannsynligheter for bildet, summerer til 1."""
+def klassifiser_bilde(bilde_sti: Path) -> dict:
+    """Materialsannsynligheter fra bildet, summerer til 1."""
     start = time.perf_counter()
     sannsyn = vision_material.predict_material(bilde_sti)
     ms = (time.perf_counter() - start) * 1000
-    print(f"  {vision_material.norwegian_line(sannsyn)}   ({ms:.0f} ms)")
+    print(f"  bilde:  {rangert(sannsyn)}   ({ms:.0f} ms)")
     return sannsyn
 
 
-def skriv_resultat(wav: Path, bilde: Path, sannsyn: dict) -> None:
-    """Legger bildet og materialgjetningen inn i opptakets JSON-fil."""
+def klassifiser_lyd(bundle, wav_sti: Path) -> dict:
+    """Materialsannsynligheter fra lyden, summerer til 1."""
+    start = time.perf_counter()
+    sannsyn = material_classifier.predict_proba(bundle, wav_sti)
+    ms = (time.perf_counter() - start) * 1000
+    print(f"  lyd:    {rangert(sannsyn)}   ({ms:.0f} ms)")
+    return sannsyn
+
+
+def skriv_resultat(wav: Path, bilde: Path, syn: dict, lyd: dict | None) -> None:
+    """Legger begge gjetningene inn i opptakets JSON-fil."""
     meta_sti = wav.with_suffix(".json")
     meta = json.loads(meta_sti.read_text(encoding="utf-8"))
-    beste = max(sannsyn, key=sannsyn.get)
+    beste_syn = max(syn, key=syn.get)
     meta.update(
         {
             "image": bilde.name,
-            "vision": {k: round(v, 4) for k, v in sannsyn.items()},
-            "vision_material": beste,
-            "vision_confidence": round(sannsyn[beste], 4),
+            "vision": {k: round(v, 4) for k, v in syn.items()},
+            "vision_material": beste_syn,
+            "vision_confidence": round(syn[beste_syn], 4),
         }
     )
+    if lyd:
+        beste_lyd = max(lyd, key=lyd.get)
+        meta.update(
+            {
+                "audio": {k: round(v, 4) for k, v in lyd.items()},
+                "audio_material": beste_lyd,
+                "audio_confidence": round(lyd[beste_lyd], 4),
+            }
+        )
     meta_sti.write_text(
         json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
 
 
-def en_maling(board: Board, stem: str, out_dir: Path, kamera: int, vent: float) -> Path:
-    """Tar imot ett opptak, tar bildet, klassifiserer og skriver alt til disk."""
+def en_maling(
+    board: Board, stem: str, out_dir: Path, kamera: int, vent: float, bundle
+) -> Path:
+    """Tar imot ett opptak, tar bildet, klassifiserer begge og skriver til disk."""
     wav = rig_recieve.collect(board, out_dir, wait_for_begin=vent, stem=stem)
-    print(f"  lyd:   {wav.name}")
-
     bilde = ta_bilde(stem, out_dir, kamera)
-    print(f"  bilde: {bilde.name}")
+    print(f"  filer:  {wav.name}, {bilde.name}")
 
-    sannsyn = klassifiser(siste_bilde(out_dir))
-    skriv_resultat(wav, bilde, sannsyn)
+    # Begge modellene jobber pa det sist lagrede av hver sort.
+    syn = klassifiser_bilde(siste_bilde(out_dir))
+    lyd = klassifiser_lyd(bundle, siste_opptak(out_dir)) if bundle else None
+
+    skriv_resultat(wav, bilde, syn, lyd)
     plot_recording.plot(wav, show=False)
     return wav
 
@@ -114,10 +162,21 @@ def main() -> int:
     parser.add_argument("--kamera", type=int, default=0, help="kameraindeks")
     parser.add_argument("--port", default=None, help="f.eks. COM3")
     parser.add_argument("--out", default=str(OUT_DIR), help="mappe for malingene")
+    parser.add_argument(
+        "--lydmodell", type=Path, default=LYDMODELL, help="trent .joblib-modell"
+    )
     args = parser.parse_args()
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Lydmodellen lastes en gang. Mangler den, kjorer vi videre med bare bildet
+    # i stedet for a stoppe malingen.
+    try:
+        bundle = material_classifier.load_bundle(args.lydmodell)
+    except ValueError as exc:
+        print(f"advarsel: ingen lydmodell ({exc}). Bare bildet klassifiseres.")
+        bundle = None
 
     try:
         board = Board.connect(port=args.port)
@@ -155,6 +214,7 @@ def main() -> int:
                         out_dir,
                         args.kamera,
                         vent=3600.0 if not args.trigg else rig_recieve.BEGIN_TIMEOUT,
+                        bundle=bundle,
                     )
                 except rig_recieve.TransferError as exc:
                     # En tapt maling skal ikke rive ned lyttingen: meld fra og

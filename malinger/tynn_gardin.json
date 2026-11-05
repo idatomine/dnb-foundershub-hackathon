@@ -1,4 +1,5 @@
 {
+  "material": "textile",
   "run": 3,
   "label": "meas",
   "rate": 16000,
