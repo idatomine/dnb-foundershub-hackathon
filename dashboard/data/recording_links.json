@@ -1,0 +1,11 @@
+{
+  "_note": "Recording file stem (in recordings/) -> dashboard object id, based on Lone's labelled file names. An 'object' field inside a recording's own JSON overrides this file. Set \"mock\": true to tag links as mockups in the UI.",
+  "mock": false,
+  "links": {
+    "tykk_gardin": "gardin_mork",
+    "tynn_gardin": "gardin_lys",
+    "lerret": "tavle",
+    "trevegg": "vegg_front",
+    "plast": ["stoler_rad1_venstre", "stoler_rad1_hoyre", "stoler_rad2"]
+  }
+}

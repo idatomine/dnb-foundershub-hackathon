@@ -16,7 +16,7 @@ import threading
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import quote, unquote, urlparse
 
 ROOT = Path(__file__).parent
 DATA_DIR = ROOT / "data"
@@ -27,6 +27,9 @@ MATERIALS_PATH = DATA_DIR / "materials.json"
 USER_SURFACES_PATH = DATA_DIR / "user_surfaces.json"
 CLOUD_PATH = DATA_DIR / "cloud.bin"
 CLOUD_META_PATH = DATA_DIR / "cloud.json"
+RECORDINGS_DIR = ROOT.parent / "recordings"
+RECORDING_META_KEYS = ("run", "label", "material", "distance_mm", "tilt", "orientation", "sweep_f1", "sweep_f2",
+                       "sweep_seconds", "rate", "peak_level", "recorded_at", "duration_s")
 CATEGORIES = {"wall", "floor", "ceiling", "window", "door", "furniture", "other"}
 
 PORT = 8765
@@ -60,6 +63,47 @@ def _save_json(path: Path, data) -> None:
     tmp.replace(path)
 
 
+def load_recordings(surface_ids: set[str]) -> dict[str, list]:
+    """Group rig recordings by object. A recording belongs to an object when its JSON has
+    "object": "<id>", when data/recording_links.json maps its file stem to one or more ids,
+    when its "label" is an object id, or when an id appears in its file name."""
+    by_object: dict[str, list] = {}
+    if not RECORDINGS_DIR.is_dir():
+        return by_object
+    files = sorted(p.name for p in RECORDINGS_DIR.iterdir())
+    link_file = _load_json(DATA_DIR / "recording_links.json", {})
+    links, mock = link_file.get("links", {}), bool(link_file.get("mock", False))
+    for meta_path in sorted(RECORDINGS_DIR.glob("*.json")):
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        stem = meta_path.stem
+        related = [f for f in files if f.rsplit(".", 1)[0] == stem or f.startswith(stem + "_")]
+        targets, is_mock = [], False
+        if meta.get("object") in surface_ids:
+            targets = [meta["object"]]
+        elif stem in links:
+            linked = links[stem] if isinstance(links[stem], list) else [links[stem]]
+            targets, is_mock = [t for t in linked if t in surface_ids], mock
+        elif meta.get("label") in surface_ids:
+            targets = [meta["label"]]
+        else:
+            hit = next((sid for sid in sorted(surface_ids, key=len, reverse=True)
+                        if any(sid in f for f in related)), None)
+            targets = [hit] if hit else []
+        record = {
+            "id": stem,
+            "spectrogram": next((f"/recordings/{quote(f)}" for f in related if f.endswith(".png")), None),
+            "audio": next((f"/recordings/{quote(f)}" for f in related if f.endswith(".wav")), None),
+            "meta": {k: meta[k] for k in RECORDING_META_KEYS if k in meta},
+            "mock": is_mock,
+        }
+        for target in targets:
+            by_object.setdefault(target, []).append(record)
+    return by_object
+
+
 def load_room() -> dict:
     """Base scan merged with any saved enrichment, keyed by surface id."""
     base = _load_json(ROOM_SCAN_PATH, {"room": {}, "surfaces": []})
@@ -68,7 +112,9 @@ def load_room() -> dict:
         surface["user_placed"] = True
         base["surfaces"].append(surface)
     enriched = _load_json(ENRICHED_PATH, {})
+    recordings = load_recordings({s["id"] for s in base.get("surfaces", [])})
     for surface in base.get("surfaces", []):
+        surface["recordings"] = recordings.get(surface["id"], [])
         overlay = enriched.get(surface["id"])
         surface["enrichment"] = {**EMPTY_ENRICHMENT, **(overlay or {})}
         if overlay and "absorption_alpha" in overlay:
@@ -229,6 +275,21 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_recording(self, name: str):
+        types = {".png": "image/png", ".wav": "audio/wav", ".json": "application/json"}
+        name = unquote(name)
+        path = RECORDINGS_DIR / name
+        if ("/" in name or "\\" in name or name.startswith(".") or path.suffix not in types
+                or path.resolve().parent != RECORDINGS_DIR.resolve() or not path.is_file()):
+            self.send_error(404)
+            return
+        body = path.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", types[path.suffix])
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self):
         parsed = urlparse(self.path)
         if parsed.path == "/api/room":
@@ -242,6 +303,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+        elif parsed.path.startswith("/recordings/"):
+            self._send_recording(parsed.path[len("/recordings/"):])
         elif parsed.path == "/api/export/pyroomacoustics":
             self._send_json(export_pyroomacoustics())
         elif parsed.path == "/" or not parsed.path.startswith("/api/"):

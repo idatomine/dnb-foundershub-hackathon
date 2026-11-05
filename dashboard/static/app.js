@@ -42,19 +42,12 @@ function setupViewer() {
     render();
   }).observe(viewerEl);
 
-  const tip = document.createElement("div");
-  tip.className = "hover-tip";
-  tip.hidden = true;
-  viewerEl.appendChild(tip);
   let pending = null;
   renderer.domElement.addEventListener("pointermove", e => {
     if (pending) return;
-    pending = requestAnimationFrame(() => { pending = null; updateHover(e, tip); });
+    pending = requestAnimationFrame(() => { pending = null; updateHover(e); });
   });
-  renderer.domElement.addEventListener("pointerleave", () => {
-    tip.hidden = true;
-    if (hoveredId) { hoveredId = null; updateBoxVisibility(); }
-  });
+  renderer.domElement.addEventListener("pointerleave", () => setHover(null));
 
   // A click only counts if the pointer barely moved, so orbiting does not select things.
   let down = null;
@@ -67,49 +60,146 @@ function setupViewer() {
 
 function render() { renderer.render(scene, camera); }
 
-function updateHover(e, tip) {
-  if (e.buttons) {
-    tip.hidden = true;
-    if (hoveredId) { hoveredId = null; updateBoxVisibility(); }
-    return;
-  }
+function updateHover(e) {
+  if (e.buttons) { setHover(null); return; }
   const rect = renderer.domElement.getBoundingClientRect();
   raycaster.setFromCamera(new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1,
     -((e.clientY - rect.top) / rect.height) * 2 + 1), camera);
   const hit = raycaster.intersectObjects([...boxGroups.values()].map(g => g.children[0]), false)[0];
   const s = hit && room.surfaces.find(x => x.id === hit.object.userData.id);
   renderer.domElement.style.cursor = s && !placeMode ? "pointer" : "";
-  const newHover = s ? s.id : null;
-  if (newHover !== hoveredId) { hoveredId = newHover; updateBoxVisibility(); }
-  if (!s) { tip.hidden = true; return; }
+  setHover(s ? s.id : null);
+}
 
-  const en = s.enrichment;
-  const rows = [];
-  const add = (k, v) => { if (v != null && v !== "") rows.push([k, String(v)]); };
-  add("Material", en.material || s.cv_guess?.material);
-  add("Fabric", en.fabric);
-  add("Friction coeff", en.friction_coeff);
-  add("Density", en.density_kg_m3 != null ? `${en.density_kg_m3} kg/m³` : null);
-  add("Thickness", en.thickness_mm != null ? `${en.thickness_mm} mm` : null);
-  const alpha = BANDS.filter(b => en.absorption_alpha[b] != null);
-  if (alpha.length) add("α", alpha.map(b => `${BAND_LABELS[b]}: ${en.absorption_alpha[b]}`).join("  "));
-  add("Data", SOURCE_LABELS[en.source] || en.source);
+// The hover card covers the editor without rebuilding it, so unsaved edits survive.
+function setHover(id) {
+  if (id === hoveredId) return;
+  hoveredId = id;
+  updateBoxVisibility();
+  const card = document.getElementById("hover-card");
+  const detail = document.getElementById("detail");
+  const s = id && id !== selectedId && room.surfaces.find(x => x.id === id);
+  if (!s) { card.hidden = true; detail.hidden = false; return; }
+  fillHoverCard(card, s);
+  card.hidden = false;
+  detail.hidden = true;
+}
 
-  tip.replaceChildren();
-  const title = document.createElement("strong");
-  title.textContent = s.label;
-  tip.appendChild(title);
-  for (const [k, v] of rows) {
-    const line = document.createElement("div");
-    const key = document.createElement("span");
-    key.textContent = `${k}: `;
-    line.append(key, v);
-    tip.appendChild(line);
+function renderRecordings(container, s, withAudio) {
+  container.replaceChildren();
+  const recs = s.recordings || [];
+  const h = document.createElement("h3");
+  h.textContent = `Rig measurements (${recs.length})`;
+  container.appendChild(h);
+  if (!recs.length) {
+    const p = document.createElement("p");
+    p.className = "muted small";
+    p.textContent = "No recordings linked to this object yet.";
+    container.appendChild(p);
+    return;
   }
-  tip.hidden = false;
-  const vx = e.clientX - rect.left, vy = e.clientY - rect.top;
-  tip.style.left = `${Math.min(vx + 14, rect.width - tip.offsetWidth - 8)}px`;
-  tip.style.top = `${Math.min(vy + 14, rect.height - tip.offsetHeight - 8)}px`;
+  for (const r of recs) {
+    const fig = document.createElement("figure");
+    fig.className = "rec";
+    if (r.audio) {
+      const canvas = document.createElement("canvas");
+      canvas.className = "spectro";
+      canvas.setAttribute("role", "img");
+      canvas.setAttribute("aria-label", `Waveform and spectrogram of ${r.id}`);
+      fig.appendChild(canvas);
+      drawSpectrogram(canvas, r.audio);
+    } else if (r.spectrogram) {
+      const img = document.createElement("img");
+      img.src = r.spectrogram; img.alt = `Spectrogram ${r.id}`; img.loading = "lazy";
+      fig.appendChild(img);
+    }
+    const m = r.meta || {};
+    const parts = [];
+    if (m.material) parts.push(m.material);
+    if (m.run != null) parts.push(`Run ${m.run}`);
+    if (m.distance_mm != null) parts.push(`${m.distance_mm} mm`);
+    if (m.sweep_f1 != null && m.sweep_f2 != null) parts.push(`sweep ${m.sweep_f1}–${m.sweep_f2} Hz`);
+    if (m.peak_level != null) parts.push(`peak ${m.peak_level} dB`);
+    if (m.recorded_at) parts.push(new Date(m.recorded_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+    const cap = document.createElement("figcaption");
+    cap.className = "muted small";
+    cap.textContent = parts.join(" · ") || r.id;
+    if (r.mock) {
+      const tag = document.createElement("span");
+      tag.className = "mock-tag";
+      tag.textContent = "mockup";
+      cap.prepend(tag);
+    }
+    fig.appendChild(cap);
+    if (withAudio && r.audio) {
+      const audio = document.createElement("audio");
+      audio.controls = true; audio.preload = "none"; audio.src = r.audio;
+      fig.appendChild(audio);
+    }
+    container.appendChild(fig);
+  }
+}
+
+function fillHoverCard(card, s) {
+  const en = s.enrichment;
+  card.replaceChildren();
+  const head = document.createElement("div");
+  head.className = "detail-head";
+  const title = document.createElement("h2");
+  title.textContent = s.label;
+  const badge = document.createElement("span");
+  badge.className = "badge";
+  badge.dataset.source = en.source;
+  badge.textContent = SOURCE_LABELS[en.source] || en.source;
+  head.append(title, badge);
+  const cv = document.createElement("p");
+  cv.className = "muted";
+  cv.textContent = s.cv_guess ? `Scan says: ${s.category} · ${s.cv_guess.material}` : s.category;
+  card.append(head, cv);
+
+  const g = s.geometry;
+  const rows = [
+    ["Material", en.material], ["Fabric / composition", en.fabric], ["Friction coefficient", en.friction_coeff],
+    ["Density", en.density_kg_m3 != null ? `${en.density_kg_m3} kg/m³` : null],
+    ["Thickness", en.thickness_mm != null ? `${en.thickness_mm} mm` : null],
+    ["Size (w × d × h)", g?.size_m ? g.size_m.map(v => v.toFixed(2)).join(" × ") + " m" : null],
+    ["Notes", en.notes],
+  ];
+  const dl = document.createElement("dl");
+  dl.className = "meta-list";
+  for (const [k, v] of rows) {
+    const dt = document.createElement("dt"); dt.textContent = k;
+    const dd = document.createElement("dd");
+    if (v == null || v === "") { dd.textContent = "—"; dd.className = "muted"; } else dd.textContent = String(v);
+    dl.append(dt, dd);
+  }
+  card.appendChild(dl);
+
+  const alphaTitle = document.createElement("h3");
+  alphaTitle.textContent = "Absorption α per octave band";
+  const grid = document.createElement("div");
+  grid.className = "alpha-read";
+  for (const band of BANDS) {
+    const cell = document.createElement("div");
+    const v = en.absorption_alpha[band];
+    const bar = document.createElement("div");
+    bar.className = "alpha-bar";
+    bar.style.height = `${Math.round((v ?? 0) * 60)}px`;
+    const val = document.createElement("span");
+    val.textContent = v ?? "—";
+    const lab = document.createElement("span");
+    lab.className = "muted";
+    lab.textContent = BAND_LABELS[band];
+    cell.append(val, bar, lab);
+    grid.appendChild(cell);
+  }
+  const hint = document.createElement("p");
+  hint.className = "muted small";
+  hint.textContent = "Click the object to edit.";
+  const recs = document.createElement("div");
+  recs.className = "recordings";
+  renderRecordings(recs, s, false);
+  card.append(alphaTitle, grid, recs, hint);
 }
 
 async function loadCloud(meta) {
@@ -129,7 +219,8 @@ async function loadCloud(meta) {
   const [mn, mx] = [meta.min, meta.max];
   const center = new THREE.Vector3((mn[0] + mx[0]) / 2, (mn[1] + mx[1]) / 2, (mn[2] + mx[2]) / 2);
   controls.target.copy(center);
-  camera.position.set(center.x, center.y - 9, center.z + 5);
+  // Start view: original offset (0, -9) rotated 270° in the xy plane → (-9, 0).
+  camera.position.set(center.x - 9, center.y, center.z + 5);
   controls.update();
   status.textContent = `${n.toLocaleString()} points from ${meta.source}. Floor is near z = ${mn[2].toFixed(1)} m.`;
   render();
@@ -227,6 +318,7 @@ async function onViewerClick(e) {
 
   const hit = raycaster.intersectObjects([...boxGroups.values()].map(g => g.children[0]), false)[0];
   if (hit) select(hit.object.userData.id);
+  else deselect();
 }
 
 function setPlaceMode(on) {
@@ -251,6 +343,12 @@ async function init() {
   document.getElementById("room-name").textContent = room.room?.name || "Room";
   document.getElementById("room-source").textContent = room.room?.source || "";
   document.getElementById("place-btn").addEventListener("click", () => setPlaceMode(!placeMode));
+  document.addEventListener("keydown", e => {
+    if (e.key !== "Escape") return;
+    if (e.target.closest("input, textarea, select")) { e.target.blur(); return; }
+    if (placeMode) setPlaceMode(false);
+    else deselect();
+  });
   document.getElementById("point-size").addEventListener("input", e => {
     if (cloudPoints) { cloudPoints.material.size = Number(e.target.value); render(); }
   });
@@ -294,11 +392,26 @@ function updateProgress() {
   document.getElementById("progress").textContent = `${done} / ${room.surfaces.length} objects enriched`;
 }
 
+const EMPTY_DETAIL = '<p class="muted empty">Hover over an object in the 3D view to see its data. Click it to edit.</p>';
+
+function deselect() {
+  if (!selectedId) return;
+  selectedId = null;
+  rebuildBoxes();
+  renderList();
+  document.getElementById("detail").innerHTML = EMPTY_DETAIL;
+  document.getElementById("hover-card").hidden = true;
+  document.getElementById("detail").hidden = false;
+}
+
 function select(id) {
+  if (id === selectedId) { deselect(); return; }
   selectedId = id;
   rebuildBoxes();
   renderList();
   renderDetail();
+  document.getElementById("hover-card").hidden = true;
+  document.getElementById("detail").hidden = false;
 }
 
 // ---------- detail panel ----------
@@ -323,6 +436,7 @@ function renderDetail() {
     ? `Scan says: ${s.category} · ${cv.material ?? "unknown"}` + (cv.confidence != null ? ` (${Math.round(cv.confidence * 100)}% confidence)` : "")
     : "Placed by hand in the 3D view.";
 
+  renderRecordings(panel.querySelector(".d-recordings"), s, true);
   const form = panel.querySelector(".d-form");
 
   // Box geometry: edits move the box in the 3D view straight away.
@@ -358,7 +472,7 @@ function renderDetail() {
     await fetch(`/api/surfaces/${encodeURIComponent(s.id)}`, { method: "DELETE" });
     selectedId = null;
     await reloadRoom();
-    document.getElementById("detail").innerHTML = '<p class="muted empty">Select an object.</p>';
+    document.getElementById("detail").innerHTML = EMPTY_DETAIL;
   });
 
   const presetSel = form.elements.preset;
@@ -459,3 +573,151 @@ function drawAlphaChart(form) {
 }
 
 init();
+
+// ---------- spectrograms drawn from the WAV, so they follow the dark theme ----------
+const MAGMA = [[0, 0, 4], [28, 16, 68], [79, 18, 123], [129, 37, 129], [181, 54, 122],
+  [229, 80, 100], [251, 135, 97], [254, 194, 135], [252, 253, 191]];
+const DB_FLOOR = -90;
+const spectroCache = new Map();
+
+function magma(t) {
+  const x = Math.min(Math.max(t, 0), 1) * (MAGMA.length - 1);
+  const i = Math.min(Math.floor(x), MAGMA.length - 2), f = x - i;
+  return MAGMA[i].map((c, k) => c + (MAGMA[i + 1][k] - c) * f);
+}
+
+function parseWav(buf) {
+  const v = new DataView(buf);
+  let pos = 12, rate = 16000, bits = 16, channels = 1;
+  while (pos + 8 <= v.byteLength) {
+    const id = String.fromCharCode(v.getUint8(pos), v.getUint8(pos + 1), v.getUint8(pos + 2), v.getUint8(pos + 3));
+    const size = v.getUint32(pos + 4, true);
+    if (id === "fmt ") {
+      channels = v.getUint16(pos + 10, true);
+      rate = v.getUint32(pos + 12, true);
+      bits = v.getUint16(pos + 22, true);
+    } else if (id === "data") {
+      if (bits !== 16) throw new Error("only 16-bit WAV");
+      const n = Math.floor(Math.min(size, v.byteLength - pos - 8) / 2 / channels);
+      const out = new Float32Array(n);
+      for (let i = 0; i < n; i++) out[i] = v.getInt16(pos + 8 + i * 2 * channels, true) / 32768;
+      return { samples: out, rate };
+    }
+    pos += 8 + size + (size % 2);
+  }
+  throw new Error("no data chunk");
+}
+
+function fftMag2(re, im) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = -2 * Math.PI / len, wr = Math.cos(ang), wi = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let cr = 1, ci = 0;
+      for (let k = 0; k < len / 2; k++) {
+        const a = i + k, b = a + len / 2;
+        const tr = re[b] * cr - im[b] * ci, ti = re[b] * ci + im[b] * cr;
+        re[b] = re[a] - tr; im[b] = im[a] - ti; re[a] += tr; im[a] += ti;
+        [cr, ci] = [cr * wr - ci * wi, cr * wi + ci * wr];
+      }
+    }
+  }
+  const out = new Float32Array(n / 2 + 1);
+  for (let k = 0; k <= n / 2; k++) out[k] = re[k] * re[k] + im[k] * im[k];
+  return out;
+}
+
+async function computeSpectrogram(url) {
+  if (spectroCache.has(url)) return spectroCache.get(url);
+  const job = (async () => {
+    const { samples, rate } = parseWav(await (await fetch(url)).arrayBuffer());
+    const nfft = 1024, hop = 128;
+    const win = Float32Array.from({ length: nfft }, (_, i) => 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (nfft - 1)));
+    const frames = Math.max(1, Math.floor((samples.length - nfft) / hop) + 1);
+    const bins = nfft / 2 + 1;
+    const db = new Float32Array(frames * bins);
+    let top = -Infinity;
+    for (let f = 0; f < frames; f++) {
+      const re = new Float32Array(nfft), im = new Float32Array(nfft);
+      for (let i = 0; i < nfft; i++) re[i] = (samples[f * hop + i] || 0) * win[i];
+      const p = fftMag2(re, im);
+      for (let k = 0; k < bins; k++) {
+        const v = 10 * Math.log10(Math.max(p[k], 1e-20));
+        db[f * bins + k] = v;
+        if (v > top) top = v;
+      }
+    }
+    const img = document.createElement("canvas");
+    img.width = frames; img.height = bins;
+    const ctx = img.getContext("2d");
+    const data = ctx.createImageData(frames, bins);
+    for (let f = 0; f < frames; f++) {
+      for (let k = 0; k < bins; k++) {
+        const [r, g, b] = magma((db[f * bins + k] - top - DB_FLOOR) / -DB_FLOOR);
+        const o = ((bins - 1 - k) * frames + f) * 4;
+        data.data[o] = r; data.data[o + 1] = g; data.data[o + 2] = b; data.data[o + 3] = 255;
+      }
+    }
+    ctx.putImageData(data, 0, 0);
+    return { img, samples, rate, duration: samples.length / rate };
+  })();
+  spectroCache.set(url, job);
+  return job;
+}
+
+async function drawSpectrogram(canvas, url) {
+  const W = 640, H = 300, padL = 40, padR = 8, padT = 8, waveH = 56, gap = 10, padB = 22;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+  const styles = getComputedStyle(document.documentElement);
+  const muted = styles.getPropertyValue("--muted").trim() || "#9aa1ab";
+  const accent = styles.getPropertyValue("--accent").trim() || "#60a5fa";
+  const border = styles.getPropertyValue("--border").trim() || "#2b2f37";
+  ctx.fillStyle = "#0d0f12";
+  ctx.fillRect(0, 0, W, H);
+  ctx.font = "10px system-ui, sans-serif";
+  ctx.fillStyle = muted;
+  ctx.fillText("Loading…", padL, padT + 14);
+
+  let spec;
+  try { spec = await computeSpectrogram(url); }
+  catch (err) { ctx.fillStyle = "#0d0f12"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = muted; ctx.fillText(`Could not read audio: ${err.message}`, padL, padT + 14); return; }
+  ctx.fillStyle = "#0d0f12";
+  ctx.fillRect(0, 0, W, H);
+  const plotW = W - padL - padR;
+
+  // Waveform as min/max per pixel column.
+  const midY = padT + waveH / 2;
+  ctx.strokeStyle = border; ctx.beginPath(); ctx.moveTo(padL, midY); ctx.lineTo(padL + plotW, midY); ctx.stroke();
+  ctx.fillStyle = accent;
+  const s = spec.samples, per = s.length / plotW;
+  for (let x = 0; x < plotW; x++) {
+    let lo = 0, hi = 0;
+    for (let i = Math.floor(x * per); i < Math.floor((x + 1) * per); i++) { if (s[i] < lo) lo = s[i]; if (s[i] > hi) hi = s[i]; }
+    ctx.fillRect(padL + x, midY - hi * waveH / 2, 1, Math.max(1, (hi - lo) * waveH / 2));
+  }
+
+  // Spectrogram.
+  const specTop = padT + waveH + gap, specH = H - specTop - padB;
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(spec.img, padL, specTop, plotW, specH);
+
+  ctx.fillStyle = muted;
+  ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  const nyq = spec.rate / 2;
+  for (let f = 0; f <= nyq; f += 2000) ctx.fillText(f === 0 ? "0" : `${f / 1000}k`, padL - 6, specTop + specH * (1 - f / nyq));
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  for (let t = 0; t <= spec.duration + 1e-6; t += 0.2) ctx.fillText(`${t.toFixed(1)}s`, padL + plotW * t / spec.duration, specTop + specH + 6);
+  ctx.save();
+  ctx.translate(10, specTop + specH / 2); ctx.rotate(-Math.PI / 2);
+  ctx.textAlign = "center"; ctx.fillText("Hz", 0, 0);
+  ctx.restore();
+}

@@ -71,9 +71,12 @@ header p { margin: 3px 0 0 18px; font: 11.5px var(--mono); }
 
 /* ---------- layout ---------- */
 main {
-  display: grid; grid-template-columns: minmax(320px, 1fr) minmax(360px, 520px);
+  display: grid; grid-template-columns: minmax(340px, 1.2fr) minmax(360px, 470px);
   gap: 18px; padding: 20px 28px 32px;
+  align-items: start; /* cards keep their own height; hover content in one no longer stretches the other */
 }
+.detail-panel { position: sticky; top: 78px; max-height: calc(100vh - 96px); overflow-y: auto; }
+@media (max-width: 860px) { .detail-panel { position: static; max-height: none; } }
 @media (max-width: 860px) { main { grid-template-columns: 1fr; padding: 16px; } }
 section {
   background: linear-gradient(180deg, var(--panel), var(--bg-2));
@@ -93,6 +96,23 @@ section {
 .legend span.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
 
 /* ---------- object list ---------- */
+.objects-dropdown { border: 1px solid var(--border); border-radius: 9px; background: rgba(255, 255, 255, 0.01); }
+.objects-dropdown summary {
+  list-style: none; cursor: pointer; user-select: none;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 11px 14px;
+}
+.objects-dropdown summary::-webkit-details-marker { display: none; }
+.objects-dropdown summary h2 { margin: 0; }
+.objects-dropdown summary:hover h2 { color: var(--accent); }
+.objects-dropdown summary::after {
+  content: ""; width: 7px; height: 7px; margin-right: 3px;
+  border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted);
+  transform: rotate(45deg); transition: transform .2s;
+}
+.objects-dropdown[open] summary::after { transform: rotate(-135deg); }
+.objects-dropdown[open] summary { border-bottom: 1px solid var(--border); }
+.objects-dropdown .object-list { padding: 8px; }
 .object-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 2px; }
 .object-list li {
   display: flex; justify-content: space-between; align-items: center; gap: 8px;
@@ -188,16 +208,19 @@ legend { font: 500 10.5px var(--mono); color: var(--accent); padding: 0 6px; tex
 .size-ctl input { width: 90px; padding: 0; accent-color: var(--accent); background: transparent; border: none; box-shadow: none; }
 .d-form fieldset.geom { margin-top: 14px; }
 
-.hover-tip {
-  position: absolute; pointer-events: none; z-index: 5; max-width: 280px;
-  background: rgba(7, 9, 12, 0.92); backdrop-filter: blur(8px);
-  color: var(--fg); border: 1px solid var(--border-hi);
-  border-radius: 8px; padding: 8px 11px; font: 11.5px/1.5 var(--mono);
-}
-.hover-tip strong { display: block; font: 600 12.5px var(--sans); margin-bottom: 2px; color: var(--accent); }
-.hover-tip span { color: var(--muted); }
-
-/* ---------- scrollbars ---------- */
-* { scrollbar-width: thin; scrollbar-color: var(--border-hi) transparent; }
-::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 8px; }
+.meta-list { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 12px 0 16px; }
+.meta-list dt { color: var(--muted); font-size: 12px; }
+.meta-list dd { margin: 0; }
+#hover-card h3 { font-size: 12px; color: var(--muted); font-weight: 500; margin: 0 0 8px; }
+.alpha-read { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; align-items: end; text-align: center; font-size: 12px; }
+.alpha-read > div { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 3px; height: 100px; }
+.alpha-bar { width: 60%; background: var(--accent); border-radius: 2px 2px 0 0; min-height: 1px; }
+[hidden] { display: none !important; }
+.recordings { margin: 16px 0; }
+.recordings h3 { font-size: 12px; color: var(--muted); font-weight: 500; margin: 0 0 8px; }
+.rec { margin: 0 0 12px; }
+.rec img { width: 100%; border-radius: 6px; border: 1px solid var(--border); display: block; }
+.rec figcaption { margin-top: 4px; }
+.rec audio { width: 100%; margin-top: 4px; height: 32px; }
+.mock-tag { display: inline-block; font-size: 10px; padding: 0 6px; margin-right: 6px; border-radius: 999px; border: 1px solid var(--border); text-transform: uppercase; letter-spacing: 0.04em; }
+.rec canvas.spectro { width: 100%; height: auto; display: block; border-radius: 6px; border: 1px solid var(--border); }
