@@ -6,7 +6,7 @@ Usage:
     python material_classifier.py train --data data --out results
     python material_classifier.py predict --model results/material_rf.joblib --wav NEW.wav
 
-Training only requires a material label in each JSON (or a material folder).
+Training requires a material label in each matching JSON.
 Optional object IDs enable more robust evaluation on unseen physical objects.
 Without object IDs, validation is recording-level and may overestimate accuracy.
 """
@@ -34,8 +34,9 @@ from sklearn.metrics import (
 )
 
 SR = 16_000
-CLASSES = ("plastic", "metal", "wood", "textile", "glass")
+CLASSES = ("air", "plastic", "metal", "wood", "textile", "glass")
 ALIASES = {
+    "air": "air",
     "plast": "plastic", "plastic": "plastic",
     "metall": "metal", "metal": "metal",
     "wood": "wood", "tre": "wood",
@@ -58,7 +59,7 @@ def load_metadata(wav_path: Path) -> dict:
     json_path = wav_path.with_suffix(".json")
     if not json_path.is_file():
         return {}
-    with json_path.open("r", encoding="utf-8") as f:
+    with json_path.open("r", encoding="utf-8-sig") as f:
         meta = json.load(f)
     if not isinstance(meta, dict):
         raise ValueError(f"JSON metadata should be an object: {json_path}")
@@ -218,9 +219,9 @@ def find_labels_and_groups(root: Path, wav_path: Path, meta: dict) -> tuple[str,
     json_label = canonical_material(meta.get("material"))
     if folder_label and json_label and folder_label != json_label:
         raise ValueError(f"Conflicting folder/JSON material labels: {wav_path}")
-    material = json_label or folder_label
+    material = json_label
     if material is None:
-        raise ValueError(f"Unknown material: {wav_path}. Add material to JSON or use data/<material>/.")
+        raise ValueError(f"Missing or unsupported JSON material: {wav_path}. Expected one of {CLASSES}.")
     object_id = meta.get("object_id")
     # Optional object subfolders: data/wood/wood_01/run001.wav
     if object_id is None and len(parts) >= 3 and folder_label is not None:
@@ -233,18 +234,22 @@ def find_labels_and_groups(root: Path, wav_path: Path, meta: dict) -> tuple[str,
 def collect_dataset(root: Path):
     if not root.is_dir():
         raise ValueError(f"Training folder does not exist: {root}")
-    paths = sorted(root.rglob("*.wav")) + sorted(root.rglob("*.WAV"))
+    paths = sorted(p for p in root.rglob("*") if p.is_file() and p.suffix.lower() == ".wav")
     if not paths:
         raise ValueError(f"No WAV files in {root}")
     records, feature_rows, errors = [], [], []
     for wav_path in paths:
         try:
             meta = load_metadata(wav_path)
+            if not wav_path.with_suffix(".json").is_file():
+                raise ValueError("Missing matching JSON metadata")
             material, object_id = find_labels_and_groups(root, wav_path, meta)
             features = extract_features(wav_path, meta)
             distance = meta.get("distance_mm")
             if distance is not None:
                 distance = float(distance)
+                if not np.isfinite(distance) or distance <= 0:
+                    raise ValueError("distance_mm must be a finite positive number")
                 if not TARGET_MM - TOLERANCE_MM <= distance <= TARGET_MM + TOLERANCE_MM:
                     print(f"Distance note: {wav_path.name}: {distance:.0f} mm (suggested 140-160 mm)")
             else:
@@ -252,7 +257,7 @@ def collect_dataset(root: Path):
             feature_rows.append(features)
             records.append({"wav": str(wav_path), "material": material,
                             "object_id": object_id, "distance_mm": distance})
-        except (ValueError, OSError, RuntimeError, json.JSONDecodeError) as exc:
+        except (ValueError, TypeError, OSError, RuntimeError) as exc:
             errors.append(f"{wav_path}: {exc}")
     if errors:
         print("\nProblematic training files:", file=sys.stderr)
@@ -338,8 +343,6 @@ def train(data: Path, out: Path, n_trees: int, max_folds: int) -> None:
     missing = sorted(set(CLASSES) - set(y))
     if missing:
         raise ValueError(f"Need all {len(CLASSES)} classes. Missing: {', '.join(missing)}")
-    if any(n < 2 for n in Counter(y).values()):
-        raise ValueError("Need at least 2 recordings per class; 10–20 is a better starting target.")
 
     out.mkdir(parents=True, exist_ok=True)
     # Grouped validation is allowed ONLY if every recording has a trustworthy object ID.
@@ -348,11 +351,15 @@ def train(data: Path, out: Path, n_trees: int, max_folds: int) -> None:
         n_objects = {label: len(set(groups[y == label])) for label in CLASSES}
         splits = object_stratified_folds(y, groups, maximum=max_folds)
         cv_type = "object-grouped" if splits else "unavailable: too few objects"
-    else:
+    elif min(Counter(y).values()) >= 2:
         n_objects = None
         n_folds = min(max_folds, min(Counter(y).values()))
         splits = list(StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=42).split(X, y))
         cv_type = "recording-level stratified (may be optimistic)"
+    else:
+        n_objects = None
+        splits = []
+        cv_type = "unavailable: fewer than two recordings in a class"
 
     lines = ["ACOUSTIC MATERIAL CLASSIFIER — RANDOM FOREST", "",
              f"Classes: {', '.join(CLASSES)}", f"Recordings: {len(y)}",
@@ -401,15 +408,23 @@ def train(data: Path, out: Path, n_trees: int, max_folds: int) -> None:
         write_confusion_plot(out / "confusion_matrix.png", y, preds)
     else:
         metrics.update({"evaluated": False, "cv_folds": 0, "accuracy": None})
-        lines.extend(["VALIDATION NOT POSSIBLE: need at least two distinct physical",
-                      "objects for every class to evaluate on unseen objects."])
-        print("WARNING: Insufficient distinct objects for grouped evaluation; saving model only.")
+        lines.append("VALIDATION NOT POSSIBLE: " + cv_type)
+        lines.append("Pilot model only. Collect 10–20 recordings per class and multiple physical objects.")
+        print("WARNING: Insufficient data for validation; saving an unvalidated pilot model.")
+        for filename in ("cv_predictions.csv", "confusion_matrix.png"):
+            (out / filename).unlink(missing_ok=True)
 
     model = make_model(n_trees)
     model.fit(X, y)
     bundle = {"model": model, "feature_names": names, "classes": list(model.classes_),
               "sample_rate": SR, "version": 1, "recommended_distance_mm": TARGET_MM,
               "note": "Fixed-geometry pilot; class vote fractions are not calibrated probabilities."}
+    config = {"sample_rate": SR, "default_sweep_seconds": 0.8,
+              "window": "maximum-energy sweep-length segment", "band_edges_hz": BAND_EDGES,
+              "stft_nperseg": 512, "stft_noverlap": 384, "n_mels": 24,
+              "mfcc_indices": list(range(1, 11)), "feature_names": names}
+    bundle["feature_config"] = config
+    (out / "feature_config.json").write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
     joblib.dump(bundle, out / "material_rf.joblib")
     feature_importances = sorted(zip(names, model.feature_importances_), key=lambda pair: -pair[1])
     write_csv(out / "feature_importance.csv", ["feature", "importance"], feature_importances)
@@ -452,6 +467,8 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command", required=True)
     inspect_cmd = sub.add_parser("inspect", help="Check a WAV and extract features (does not predict).")
     inspect_cmd.add_argument("--wav", required=True, type=Path)
+    validate_cmd = sub.add_parser("validate", help="Check all dataset pairs and features without training.")
+    validate_cmd.add_argument("--data", type=Path, default=Path("data"))
     train_cmd = sub.add_parser("train", help="Train on labeled WAV + JSON recordings.")
     train_cmd.add_argument("--data", type=Path, default=Path("data"))
     train_cmd.add_argument("--out", type=Path, default=Path("results"))
@@ -464,6 +481,15 @@ def main() -> None:
     try:
         if args.command == "inspect":
             describe_audio(args.wav, load_metadata(args.wav))
+        elif args.command == "validate":
+            X, y, _, names, _ = collect_dataset(args.data)
+            print(f"Validated {len(y)} recordings; {len(names)} finite acoustic features each.")
+            for label in CLASSES:
+                print(f"  {label}: {int(np.sum(y == label))}")
+            if min(int(np.sum(y == label)) for label in CLASSES) < 2:
+                print(f"WARNING: Too few recordings for {len(CLASSES)}-class cross-validation.")
+            if X.shape[0] != len(y):
+                raise ValueError("Dataset feature/target mismatch")
         elif args.command == "train":
             if args.trees < 10 or args.folds < 2:
                 raise ValueError("--trees must be >=10 and --folds >=2")

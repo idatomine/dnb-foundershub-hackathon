@@ -1,6 +1,7 @@
-# Acoustic material classifier — 5 materials
+# Acoustic material classifier — 6 classes
 
-**Classes:** `plastic`, `metal`, `wood`, `textile`, `glass`.
+**Classes:** `air`, `plastic`, `metal`, `wood`, `textile`, `glass`.
+`metall` is accepted as an alias for `metal`. `air` means a no-target recording.
 
 This is a baseline **Random Forest** classifier based on 49 features from each WAV sweep. It is not pretrained: collect your own labeled WAV/JSON measurements first.
 
@@ -32,6 +33,9 @@ You can organize files as follows:
 
 ```
 data/
+  air/
+    run001.wav
+    run001.json
   plastic/
     run001.wav
     run001.json
@@ -51,15 +55,47 @@ data/
 
 You may instead put all WAV+JSON pairs directly under `data/`, as long as each JSON provides `material`. Extra subfolders are allowed.
 
-**`air` / `nothing` is not a sixth class here.** Store a no-object recording separately as a *baseline* for a possible future signal-processing improvement; do not include it under `data/` in this five-class training run.
+`air` is the sixth training class. Use `"material": "air"` in its JSON files.
+Collect it with the same setup and orientation as the object recordings.
+Its distance sensor reading describes the background, so it may exceed the
+object-distance range; distance warnings remain visible for quality review.
 
 ## 3. Installation
+
+Run the commands below from the `material_classifier` directory.
 
 Python 3.10+:
 
 ```bash
 python -m pip install -r requirements.txt
 ```
+
+## Current imported data
+
+The eight material recordings are correctly paired by filename stem: plastic 2,
+metal 1, wood 1, textile 3, glass 1. Their JSON `file` fields retain the original
+acquisition names; loading uses the adjacent matching JSON, so renaming the pairs
+does not require changing that historical field. PNG plots are ignored.
+
+Six complete air WAV/JSON pairs are in `data/air/`, giving 14 training
+recordings total. `references/air/` retains the unpaired `air7.wav`, its PNG,
+and `air6.json`; their correspondence is unknown, so they have not been
+relabeled or included in training. Confirm which metadata belongs to the WAV
+before moving that pair into `data/air/` with matching stems.
+
+All eight material distances are outside the initial 140–160 mm range
+(66–137 mm), and orientations vary. Preserve these measurements as exploratory
+data; collect a consistent new set at 150 mm before assessing performance.
+
+Check every pair, label, distance, and audio feature vector without training:
+
+```bash
+python material_classifier.py validate --data data
+```
+
+Missing JSON or invalid `material` is an error, even in a named material folder.
+Folder names check label consistency and optionally identify physical objects;
+they are never predictive features.
 
 ## 4. Inspect your existing example
 
@@ -69,13 +105,22 @@ python material_classifier.py inspect --wav example/rom_test_run001.wav
 
 This example was recorded at 623 mm and is *not* appropriate as a labeled 150 mm training recording. It is included only to verify that WAV parsing/feature extraction works.
 
-## 5. Train your five-class model
+## 5. Train your six-class model
 
 ```bash
 python material_classifier.py train --data data --out results
 ```
 
 It saves `material_rf.joblib`, `report.txt`, `metrics.json`, `feature_importance.csv`, and, when validation is possible, `confusion_matrix.png` and `cv_predictions.csv`.
+
+It also saves `feature_config.json` and embeds that configuration in the model.
+With the current one-recording classes it saves an **unvalidated pilot model**
+and no accuracy score. All six classes must be present. At least two recordings
+per class are needed for recording-level cross-validation; aim for 10–20.
+
+The 49 features comprise 16 band power descriptors, RMS, crest factor,
+zero-crossing rate, means/stds of five spectral descriptors, and means/stds of
+MFCCs 1–10. Training and prediction share the same extraction function.
 
 **Evaluation limitations:**
 
@@ -94,3 +139,10 @@ Provide `new_recording.json` alongside it if possible so the code can check the 
 ## Important scientific limitation
 
 The baseline uses a high-energy sweep segment, not a fully isolated object reflection. At 15 cm there can be substantial direct speaker-to-microphone leakage. Changing object size, thickness, mounting, or angle may change the measured sound. A second phase could use the actual emitted sweep and a no-object baseline for stronger signal processing.
+
+The rig source defines an exponential sweep, which could support deconvolution
+once the firmware version, exact emitted samples, gain, and recording alignment
+are confirmed. Existing air references vary in orientation/distance and are not
+a matched calibration set. Neither `play_offset` nor sensor distance establishes
+the direct acoustic path or a calibrated echo window. Keep this WAV baseline
+until matched references and timing calibration support reliable isolation.

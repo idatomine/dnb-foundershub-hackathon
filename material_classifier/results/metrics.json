@@ -1,0 +1,25 @@
+{
+  "classes": [
+    "air",
+    "plastic",
+    "metal",
+    "wood",
+    "textile",
+    "glass"
+  ],
+  "n_recordings": 14,
+  "n_unique_objects": null,
+  "recordings_per_class": {
+    "air": 6,
+    "glass": 1,
+    "metal": 1,
+    "plastic": 2,
+    "textile": 3,
+    "wood": 1
+  },
+  "objects_per_class": null,
+  "cv_type": "unavailable: fewer than two recordings in a class",
+  "evaluated": false,
+  "cv_folds": 0,
+  "accuracy": null
+}
