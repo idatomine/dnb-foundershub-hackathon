@@ -1,4 +1,6 @@
-# Satselaget: what is it made of?
+# What is it made of?
+
+**Built by the Women in AI team at the DNB Founders Hub hackathon.**
 
 Point the rig at an object and press the button. The rig plays a sound sweep and records the echo, the laptop takes a photo, and two models each guess the material: **textile, metal, wood, plastic or glass**. The guesses are combined into one answer, and the dashboard shows the result on the object in a 3D scan of the room.
 
@@ -46,8 +48,8 @@ Requires Python 3.10 or newer. Tested with 3.12 on a Mac with Apple Silicon (the
 macOS or Linux:
 
 ```bash
-git clone https://github.com/idatomine/satselag-hacakthon.git
-cd satselag-hacakthon
+git clone https://github.com/idatomine/dnb-foundershub-hackathon.git
+cd dnb-foundershub-hackathon
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -U pip
