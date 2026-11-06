@@ -176,13 +176,33 @@ def load_recordings(surface_ids: set[str]) -> dict[str, list]:
 
 
 def object_predictions(records: list) -> dict:
-    """Latest output of each model among an object's recordings."""
+    """Each model's output averaged over every recording of the object.
+
+    A single sweep is noisy — the same plastic table reads 0.25 in one recording
+    and 0.67 in the next — so one recording is a bad summary of what the rig
+    actually saw. The mean is unweighted: every recording of the object counts
+    once, and "n" says how many went in so the UI can show it. A model that only
+    some recordings carry is averaged over those, not over all of them.
+    """
     out = {}
     for record in records:
         for model, probs in record["predictions"].items():
-            out[model] = {"probabilities": probs, "recording": record["id"],
-                          "recorded_at": record["meta"].get("recorded_at")}
-    return out
+            acc = out.setdefault(model, {"totals": {}, "recordings": [], "latest": None})
+            for name, value in probs.items():
+                acc["totals"][name] = acc["totals"].get(name, 0.0) + value
+            acc["recordings"].append(record["id"])
+            acc["latest"] = record["meta"].get("recorded_at") or acc["latest"]
+    return {
+        model: {
+            "probabilities": {name: round(total / len(acc["recordings"]), 4)
+                              for name, total in acc["totals"].items()},
+            "n": len(acc["recordings"]),
+            "recordings": acc["recordings"],
+            "recording": acc["recordings"][-1],
+            "recorded_at": acc["latest"],
+        }
+        for model, acc in out.items()
+    }
 
 
 def load_room() -> dict:

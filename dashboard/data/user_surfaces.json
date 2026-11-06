@@ -3,56 +3,198 @@
     "id": "gardin_mork",
     "label": "Gardin mørk",
     "category": "furniture",
-    "cv_guess": { "material": "dark heavy draped fabric, floor to ceiling, next to the screen" },
-    "geometry": { "type": "bbox", "center_m": [1.42, 2.03, -0.475], "size_m": [2.48, 0.5, 3.19], "rotation_deg": 0 }
+    "cv_guess": {
+      "material": "dark heavy draped fabric, floor to ceiling, next to the screen"
+    },
+    "geometry": {
+      "type": "bbox",
+      "center_m": [
+        1.42,
+        2.03,
+        -0.475
+      ],
+      "size_m": [
+        2.48,
+        0.5,
+        3.19
+      ],
+      "rotation_deg": 0
+    }
   },
   {
     "id": "gardin_lys",
     "label": "Gardin lys",
     "category": "furniture",
-    "cv_guess": { "material": "light draped fabric, back wall behind the chairs" },
-    "geometry": { "type": "bbox", "center_m": [-1.615, 3.33, -0.475], "size_m": [3.03, 0.42, 3.19], "rotation_deg": 0 }
+    "cv_guess": {
+      "material": "light draped fabric, back wall behind the chairs"
+    },
+    "geometry": {
+      "type": "bbox",
+      "center_m": [
+        -1.615,
+        3.33,
+        -0.475
+      ],
+      "size_m": [
+        3.03,
+        0.42,
+        3.19
+      ],
+      "rotation_deg": 0
+    }
   },
   {
     "id": "tavle",
     "label": "Tavle / lerret",
     "category": "other",
-    "cv_guess": { "material": "flat white surface on the front wall" },
-    "geometry": { "type": "bbox", "center_m": [2.46, -0.69, -0.17], "size_m": [0.08, 2.92, 1.45], "rotation_deg": 0 }
+    "cv_guess": {
+      "material": "flat white surface on the front wall"
+    },
+    "geometry": {
+      "type": "bbox",
+      "center_m": [
+        2.46,
+        -0.69,
+        -0.17
+      ],
+      "size_m": [
+        0.08,
+        2.92,
+        1.45
+      ],
+      "rotation_deg": 0
+    }
+  },
+  {
+    "id": "bord_plast",
+    "label": "Bord (plast)",
+    "category": "furniture",
+    "cv_guess": {
+      "material": "plastic table top in front of the screen"
+    },
+    "geometry": {
+      "type": "bbox",
+      "center_m": [
+        2.03,
+        -0.69,
+        -1.7
+      ],
+      "size_m": [
+        0.75,
+        1.6,
+        0.74
+      ],
+      "rotation_deg": 0
+    }
   },
   {
     "id": "vegg_front",
     "label": "Vegg (front)",
     "category": "wall",
-    "cv_guess": { "material": "grey wall panels behind the screen" },
-    "geometry": { "type": "bbox", "center_m": [2.53, -0.545, -0.475], "size_m": [0.1, 4.79, 3.19], "rotation_deg": 0 }
+    "cv_guess": {
+      "material": "grey wall panels behind the screen"
+    },
+    "geometry": {
+      "type": "bbox",
+      "center_m": [
+        2.53,
+        -0.545,
+        -0.475
+      ],
+      "size_m": [
+        0.1,
+        4.79,
+        3.19
+      ],
+      "rotation_deg": 0
+    }
   },
   {
     "id": "stoler_rad1_venstre",
     "label": "Stoler – rad 1, venstre",
     "category": "furniture",
-    "cv_guess": { "material": "red chairs, about 4 in a row" },
-    "geometry": { "type": "bbox", "center_m": [-0.34, 0.365, -1.635], "size_m": [0.6, 1.97, 0.87], "rotation_deg": 0 }
+    "cv_guess": {
+      "material": "red chairs, about 4 in a row"
+    },
+    "geometry": {
+      "type": "bbox",
+      "center_m": [
+        -0.34,
+        0.365,
+        -1.635
+      ],
+      "size_m": [
+        0.6,
+        1.97,
+        0.87
+      ],
+      "rotation_deg": 0
+    }
   },
   {
     "id": "stoler_rad1_hoyre",
     "label": "Stoler – rad 1, høyre",
     "category": "furniture",
-    "cv_guess": { "material": "red chairs, 2–3 in a row" },
-    "geometry": { "type": "bbox", "center_m": [-0.34, -2.32, -1.635], "size_m": [0.6, 1.42, 0.87], "rotation_deg": 0 }
+    "cv_guess": {
+      "material": "red chairs, 2–3 in a row"
+    },
+    "geometry": {
+      "type": "bbox",
+      "center_m": [
+        -0.34,
+        -2.32,
+        -1.635
+      ],
+      "size_m": [
+        0.6,
+        1.42,
+        0.87
+      ],
+      "rotation_deg": 0
+    }
   },
   {
     "id": "stoler_rad2",
     "label": "Stoler – rad 2",
     "category": "furniture",
-    "cv_guess": { "material": "red chairs, partly scanned" },
-    "geometry": { "type": "bbox", "center_m": [-1.335, 0.385, -1.635], "size_m": [0.65, 1.03, 0.87], "rotation_deg": 0 }
+    "cv_guess": {
+      "material": "red chairs, partly scanned"
+    },
+    "geometry": {
+      "type": "bbox",
+      "center_m": [
+        -1.335,
+        0.385,
+        -1.635
+      ],
+      "size_m": [
+        0.65,
+        1.03,
+        0.87
+      ],
+      "rotation_deg": 0
+    }
   },
   {
     "id": "plante",
     "label": "Plante",
     "category": "other",
-    "cv_guess": { "material": "potted plant (green leaves in the scan)" },
-    "geometry": { "type": "bbox", "center_m": [-0.11, 2.95, -1.495], "size_m": [0.47, 0.45, 1.15], "rotation_deg": 0 }
+    "cv_guess": {
+      "material": "potted plant (green leaves in the scan)"
+    },
+    "geometry": {
+      "type": "bbox",
+      "center_m": [
+        -0.11,
+        2.95,
+        -1.495
+      ],
+      "size_m": [
+        0.47,
+        0.45,
+        1.15
+      ],
+      "rotation_deg": 0
+    }
   }
 ]

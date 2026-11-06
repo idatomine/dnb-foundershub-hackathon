@@ -80,6 +80,9 @@ main {
    read to their last line. Capping it hid the percentages below the fold of an
    inner scroller, and cut the object card off. Only the live card is pinned. */
 .right-col { display: grid; grid-template-rows: auto auto; gap: 18px; align-content: start; }
+/* Selecting an object lifts its card above "Latest measurement"; set by
+   updatePanelOrder() in app.js and dropped again on deselect. */
+.right-col.detail-first .detail-panel { order: -1; }
 /* Both cards scroll with the page. Pinning the live card made the object card
    slide underneath it, hiding its top. */
 .live-panel, .detail-panel { min-height: 0; }

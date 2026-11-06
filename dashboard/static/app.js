@@ -192,7 +192,10 @@ function renderPredictions(container, s) {
     name.textContent = model.label;
     const hint = document.createElement("span");
     hint.className = "muted";
-    hint.textContent = model.hint;
+    // The bars are a mean over the object's recordings, so say how many — a
+    // single noisy sweep and a settled average look identical otherwise.
+    const n = preds[model.key]?.n;
+    hint.textContent = n > 1 ? `${model.hint} · mean of ${n} recordings` : model.hint;
     if (preds[model.key]?.mock) {
       const tag = document.createElement("span");
       tag.className = "mock-tag";
@@ -449,6 +452,12 @@ function updateProgress() {
 
 const EMPTY_DETAIL = '<p class="muted empty">Hover over an object in the 3D view to see its data. Click it to edit.</p>';
 
+// With an object selected its card is the thing being read, so it moves above
+// the live card; with nothing selected the live card goes back on top.
+function updatePanelOrder() {
+  document.querySelector(".right-col").classList.toggle("detail-first", Boolean(selectedId));
+}
+
 function deselect() {
   if (!selectedId) return;
   selectedId = null;
@@ -457,6 +466,7 @@ function deselect() {
   document.getElementById("detail").innerHTML = EMPTY_DETAIL;
   document.getElementById("hover-card").hidden = true;
   document.getElementById("detail").hidden = false;
+  updatePanelOrder();
 }
 
 function select(id) {
@@ -467,6 +477,7 @@ function select(id) {
   renderDetail();
   document.getElementById("hover-card").hidden = true;
   document.getElementById("detail").hidden = false;
+  updatePanelOrder();
 }
 
 // ---------- detail panel ----------
@@ -529,6 +540,7 @@ function renderDetail() {
     selectedId = null;
     await reloadRoom();
     document.getElementById("detail").innerHTML = EMPTY_DETAIL;
+    updatePanelOrder();
   });
 
   const presetSel = form.elements.preset;

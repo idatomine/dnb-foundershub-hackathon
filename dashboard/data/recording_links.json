@@ -6,6 +6,14 @@
     "tynn_gardin": "gardin_lys",
     "lerret": "tavle",
     "trevegg": "vegg_front",
-    "plast": ["stoler_rad1_venstre", "stoler_rad1_hoyre", "stoler_rad2"]
+    "plast": [
+      "bord_plast",
+      "stoler_rad1_venstre",
+      "stoler_rad1_hoyre",
+      "stoler_rad2"
+    ],
+    "bord_(plast)": "bord_plast",
+    "plast_bord": "bord_plast",
+    "plast_bord3": "bord_plast"
   }
 }
