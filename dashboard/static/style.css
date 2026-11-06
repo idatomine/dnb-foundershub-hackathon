@@ -75,18 +75,14 @@ main {
   gap: 18px; padding: 20px 28px 32px;
   align-items: start; /* cards keep their own height; hover content in one no longer stretches the other */
 }
-/* Right column holds two independent cards: the live measurement stays put at
-   the top, the object detail scrolls on its own underneath it. */
-.right-col {
-  position: sticky; top: 78px; max-height: calc(100vh - 96px);
-  display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 18px;
-}
-.detail-panel { overflow-y: auto; min-height: 0; }
-.live-panel { overflow-y: auto; max-height: 52vh; }
-@media (max-width: 860px) {
-  .right-col { position: static; max-height: none; grid-template-rows: auto auto; }
-  .live-panel { max-height: none; }
-}
+/* Right column holds two independent cards. The column is NOT capped to the
+   viewport: the page scrolls, so both the live card and the object card can be
+   read to their last line. Capping it hid the percentages below the fold of an
+   inner scroller, and cut the object card off. Only the live card is pinned. */
+.right-col { display: grid; grid-template-rows: auto auto; gap: 18px; align-content: start; }
+/* Both cards scroll with the page. Pinning the live card made the object card
+   slide underneath it, hiding its top. */
+.live-panel, .detail-panel { min-height: 0; }
 @media (max-width: 860px) { main { grid-template-columns: 1fr; padding: 16px; } }
 section {
   background: linear-gradient(180deg, var(--panel), var(--bg-2));
@@ -243,7 +239,9 @@ legend { font: 500 10.5px var(--mono); color: var(--accent); padding: 0 6px; tex
 /* live panel: newest measurement, always visible, no selection needed */
 .live-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .live-head h2 { margin: 0; font-size: 15px; }
-.live-photo { width: 100%; max-height: 240px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); display: block; margin: 8px 0 6px; }
+/* Kept short on purpose: a tall photo pushes the model percentages — the point
+   of the panel — out of sight. */
+.live-photo { width: 100%; max-height: 150px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); display: block; margin: 8px 0 6px; }
 
 /* model probabilities */
 #hover-card h2 { margin: 0 0 2px; }
